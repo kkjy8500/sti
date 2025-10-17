@@ -356,7 +356,7 @@ def render_sex_ratio_bar(pop_df: pd.DataFrame, *, box_height_px: int = 180):
     female_color = "#60A5FA"
 
     # bar_size controls inter-bar spacing; height controls total chart space.
-    bar_size = 42
+    bar_size = 30
     bars = (
         alt.Chart(tidy)
         .mark_bar(size=bar_size)
@@ -376,7 +376,7 @@ def render_sex_ratio_bar(pop_df: pd.DataFrame, *, box_height_px: int = 180):
                 alt.Tooltip("연령대내비중:Q", title="연령대 내부 비중", format=".1%"),
             ],
         )
-        .properties(height=340)  # ✅ taller chart
+        .properties(height=240)  # ✅ taller chart
         .configure_view(stroke=None)
     )
     st.altair_chart(bars, use_container_width=True, theme=None)
@@ -699,6 +699,8 @@ def render_prg_party_box(prg_row: pd.DataFrame|None=None, pop_row: pd.DataFrame|
             </div>
         </div>
         """
+        from streamlit.components.v1 import html as html_component
+        html_component(html, height=120, scrolling=False)
 
         # --- Mini two-bar (Region vs 10-avg) ---
         try:
@@ -799,6 +801,7 @@ def render_region_detail_layout(
     
         with c3.container(height="stretch"):
             render_prg_party_box(df_prg, df_pop)
+
 
 
 
