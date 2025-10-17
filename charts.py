@@ -756,29 +756,16 @@ def render_prg_party_box(prg_row: pd.DataFrame|None=None, pop_row: pd.DataFrame|
                     alt.Chart(bar_df)
                     .mark_bar()
                     .encode(
-                        x=alt.X(
-                            "값:Q",
-                            axis=alt.Axis(format=".0%", values=[i/100 for i in range(0, 101, 2)], title=None),
-                            scale=alt.Scale(domain=[0, max(bar_df["값"])*1.1])
-                        ),
+                        x=alt.X("값:Q", axis=alt.Axis(format=".0%"), scale=alt.Scale(domain=[0, max(bar_df["값"])*1.1])),
                         y=alt.Y("항목:N", title=None),
-                        color=alt.condition(
-                            alt.datum.항목 == "해당 지역",
-                            alt.value(COLOR_BLUE),
-                            alt.value("#9CA3AF")
-                        ),
-                        tooltip=[
-                            alt.Tooltip("항목:N", title="구분"),
-                            alt.Tooltip("값:Q", title="득표력", format=".2%")
-                        ]
+                        color=alt.condition(alt.datum.항목=="해당 지역", alt.value(COLOR_BLUE), alt.value("#9CA3AF")),
+                        tooltip=[alt.Tooltip("항목:N"), alt.Tooltip("값:Q", format=".1%")]
                     )
-                ).properties(height=chart_h, padding={"top":0, "bottom":0, "left":0, "right":0}).configure_view(stroke=None)
-
+                ).properties(height=110, padding={"top":0, "bottom":0, "left":0, "right":0}).configure_view(stroke=None)
                 st.altair_chart(mini, use_container_width=True, theme=None)
         except Exception:
-            # Safe no-op: keep box rendering even if mini chart fails
             pass
-
+            
 # =========================================================
 # [Region Detail Layout]
 # HOW TO CHANGE LATER:
@@ -821,5 +808,6 @@ def render_region_detail_layout(
         render_incumbent_card(df_cur)
     with c3:
         render_prg_party_box(df_prg, df_pop)
+
 
 
