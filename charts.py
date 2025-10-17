@@ -7,6 +7,7 @@ import re, math
 import pandas as pd
 import streamlit as st
 import altair as alt
+from streamlit.components.v1 import html as st_html  # NOTE: for safe HTML render (fixes to_html() + overlay text)
 from metrics import compute_24_gap  # Safe import: used only if available
 
 # ---------------------------------------------
@@ -240,11 +241,10 @@ def render_population_box(pop_df: pd.DataFrame, *, box_height_px: int = 240):
 # =========================================================
 # [Age Composition: Half Donut]
 # NOTE:
-#  - Fixed order; shows selected cohort ratio below the chart (no HTML overlay).
-#  - This avoids spilling outside the container.
+#  - Fixed order; HTML center overlay rendered via components.html (prevents escaping).
+#  - This avoids polar/cartesian mixing in Altair and prevents HTML being printed as text.
 # HOW TO CHANGE LATER:
-#  - To restore center overlay, add a text layer or controlled HTML, but
-#    keep margin/height so it does not exceed container height.
+#  - Change W/H/inner/outer radius; nudge translateY in transform if vertical alignment needs tuning.
 # =========================================================
 def render_age_highlight_chart(pop_df: pd.DataFrame, *, box_height_px: int = 240):
     """Age composition half-donut centered in the box, with center text via HTML overlay.
@@ -337,7 +337,8 @@ def render_age_highlight_chart(pop_df: pd.DataFrame, *, box_height_px: int = 240
       </div>
     </div>
     """
-    st.markdown(html, unsafe_allow_html=True)
+    # IMPORTANT: Use components.html to avoid HTML being escaped / scripts stripped.
+    st_html(html, height=box_height_px, scrolling=False)
 
     # NOTE (How to change later):
     # - To make the donut bigger/smaller, change W/H and/or inner/outer radius.
@@ -423,10 +424,10 @@ def render_sex_ratio_bar(pop_df: pd.DataFrame, *, box_height_px: int = 240):
 # =========================================================
 # [Vote Trend by Ideology: Line Chart]
 # NOTE:
-#  - Legend is forced via an invisible layer with constant y (so Vega-Lite renders it).
-#  - Legend placed at top with horizontal direction.
+#  - Legend is forced via a tiny "ghost line" layer so legend uses STROKE swatches (matches lines).
+#  - Legend placed at top with horizontal direction and enough top padding to avoid clipping.
 # HOW TO CHANGE LATER:
-#  - To move legend, edit legend=alt.Legend(... orient="top", direction="horizontal")
+#  - Move legend via legend=alt.Legend(... orient="top", direction="horizontal", columns=4, ...)
 # =========================================================
 def render_vote_trend_chart(ts: pd.DataFrame, *, box_height_px: int = 420):
     import re
@@ -487,9 +488,18 @@ def render_vote_trend_chart(ts: pd.DataFrame, *, box_height_px: int = 420):
         .encode(
             x=alt.X("선거명_표시:N", title=None, axis=None),
             y=alt.Y("득표율:Q", axis=None),
-            color=alt.Color("계열:N",
-                            scale=alt.Scale(domain=party_order, range=colors),
-                            legend=alt.Legend(title="정당계열", orient="top", direction="horizontal", symbolStrokeWidth=6, symbolSize=140))
+            color=alt.Color(
+                "계열:N",
+                scale=alt.Scale(domain=party_order, range=colors),
+                legend=alt.Legend(
+                    title="정당계열",
+                    orient="top",
+                    direction="horizontal",
+                    symbolStrokeWidth=6,
+                    symbolSize=140,
+                    columns=4  # helps wrap in narrow containers
+                )
+            )
         )
     )
 
@@ -498,7 +508,8 @@ def render_vote_trend_chart(ts: pd.DataFrame, *, box_height_px: int = 420):
         alt.Chart(long_df)
         .mark_line(point=False, strokeWidth=3)
         .encode(
-            x=alt.X("선거명_표시:N", sort=None, axis=alt.Axis(labelAngle=-32, labelOverlap=False, labelPadding=6, labelLimit=280), title="선거명"),
+            x=alt.X("선거명_표시:N", sort=None,
+                    axis=alt.Axis(labelAngle=-32, labelOverlap=False, labelPadding=6, labelLimit=280), title="선거명"),
             y=alt.Y("득표율:Q", title="득표율(%)"),
             color=alt.Color("계열:N", scale=alt.Scale(domain=party_order, range=colors), legend=None)
         )
@@ -506,7 +517,8 @@ def render_vote_trend_chart(ts: pd.DataFrame, *, box_height_px: int = 420):
 
     sel = alt.selection_point(fields=["선거명_표시","계열"], nearest=True, on="mouseover", empty=False)
     hit = alt.Chart(long_df).mark_circle(size=600, opacity=0).encode(
-        x="선거명_표시:N", y="득표율:Q", color=alt.Color("계열:N", scale=alt.Scale(domain=party_order, range=colors), legend=None)
+        x="선거명_표시:N", y="득표율:Q",
+        color=alt.Color("계열:N", scale=alt.Scale(domain=party_order, range=colors), legend=None)
     ).add_params(sel)
 
     pts = (
@@ -525,7 +537,7 @@ def render_vote_trend_chart(ts: pd.DataFrame, *, box_height_px: int = 420):
 
     chart = (legend + line + hit + pts).properties(
         height=box_height_px,
-        padding={"top": 56, "left": 8, "right": 8, "bottom": 8},
+        padding={"top": 64, "left": 8, "right": 8, "bottom": 8},  # extra top space for legend
     ).interactive()
 
     with st.container(border=True):
@@ -794,10 +806,10 @@ def render_prg_party_box(prg_row: pd.DataFrame|None=None, pop_row: pd.DataFrame|
 # =========================================================
 # [Region Detail Layout]
 # NOTE:
-#  - Make three boxes (population_box, age_highlight_chart, sex_ratio_bar) same visual height.
-#  - Pass the same box_height_px (=240).
+#  - EXACT layout as requested: 3 columns in one row with containers and headings.
+#  - Heights are parameterized; inner chart heights already aligned (240px).
 # HOW TO CHANGE LATER:
-#  - Tune st.columns ratios only; inner chart heights are already parameterized.
+#  - Adjust st.columns([1.1, 1.6, 2.4]) ratios or gap only.
 # =========================================================
 def render_region_detail_layout(
     df_pop: pd.DataFrame | None = None,
@@ -807,19 +819,30 @@ def render_region_detail_layout(
     df_prg: pd.DataFrame | None = None,
 ):
     st.markdown("### 👥 인구 정보")
-    left, right = st.columns([1.1, 2.9])
 
-    with left:
+    # 3 columns in one row (as requested)
+    col1, col2, col3 = st.columns([1.1, 1.6, 2.4], gap="medium")
+
+    # ────────────────────────────────────────
+    # ① 인구 정보
+    # ────────────────────────────────────────
+    with col1.container(border=True, height="stretch"):
+        st.markdown("**인구 정보**")
         render_population_box(df_pop, box_height_px=240)
 
-    with right:
-        a, b = st.columns([1.6, 2.4])
-        with a.container(border=True):
-            st.markdown("**연령 구성**")
-            render_age_highlight_chart(df_pop, box_height_px=240)
-        with b.container(border=True):
-            st.markdown("**연령별, 성별 인구분포**")
-            render_sex_ratio_bar(df_pop, box_height_px=240)
+    # ────────────────────────────────────────
+    # ② 연령 구성
+    # ────────────────────────────────────────
+    with col2.container(border=True, height="stretch"):
+        st.markdown("**연령 구성**")
+        render_age_highlight_chart(df_pop, box_height_px=240)
+
+    # ────────────────────────────────────────
+    # ③ 연령별, 성별 인구분포
+    # ────────────────────────────────────────
+    with col3.container(border=True, height="stretch"):
+        st.markdown("**연령별, 성별 인구분포**")
+        render_sex_ratio_bar(df_pop, box_height_px=240)
 
     st.markdown("### 📈 정당성향별 득표추이")
     render_vote_trend_chart(df_trend, box_height_px=420)
@@ -832,7 +855,3 @@ def render_region_detail_layout(
         render_incumbent_card(df_cur)
     with c3:
         render_prg_party_box(df_prg, df_pop)
-
-
-
-
