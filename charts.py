@@ -127,13 +127,11 @@ def _party_chip_color(name: str) -> tuple[str, str]:
 # =========================================================
 # [Population Box] KPI + two-bars (Region vs 10-avg)
 # HOW TO CHANGE LATER:
-#  - To change total height, adjust box_height_px (default 120).
-#  - To change bar height only, tweak bar_h (kept separate from box height).
-#  - Colors: region = COLOR_BLUE, 10-avg = gray (#9CA3AF). Edit in 'color' if needed.
-#  - Number format: x-axis "~," (comma). Change axis format in alt.Axis(format="~,").
-# (REQ 1) Two bars: blue = region, gray = 10-avg. Same visual settings as Progressive box.
+#  - To switch back to ratio bar, set use_two_bars=False (kept logic).
+#  - To adjust bar height, tweak bar_h (e.g., 150~190).
+# (REQ 1) Two bars: blue = region, gray = 10-avg.
 # =========================================================
-def render_population_box(pop_df: pd.DataFrame, *, box_height_px: int = 120):
+def render_population_box(pop_df: pd.DataFrame, *, box_height_px: int = 240):
     if pop_df is None or pop_df.empty:
         st.info("유동인구/연령/성비 차트를 위한 데이터가 없습니다.")
         return
@@ -158,14 +156,14 @@ def render_population_box(pop_df: pd.DataFrame, *, box_height_px: int = 120):
     df[total_col] = df[total_col].apply(_to_num)
     if float_col: df[float_col] = df[float_col].apply(_to_num)
 
-    # --- Region aggregate (kept robust to multi-rows per region) ---
+    # Region total
     if code_col:
         grp = df.groupby(code_col, dropna=False)[[total_col]].sum(min_count=1).reset_index()
         region_total = float(grp[total_col].iloc[0]); region_cnt = int(grp.shape[0])
     else:
         region_total = float(df[total_col].sum());    region_cnt = 1
 
-    # --- 10-avg fallback (when single region given) ---
+    # 10-avg fallback loader
     avg_total = None
     if region_cnt >= 2:
         avg_total = float(df.groupby(code_col, dropna=False)[total_col].sum().mean())
@@ -178,7 +176,7 @@ def render_population_box(pop_df: pd.DataFrame, *, box_height_px: int = 120):
                 pop_all[tcol] = pop_all[tcol].apply(_to_num)
                 avg_total = float(pop_all.groupby(ccol, dropna=False)[tcol].sum().mean()) if ccol else float(pop_all[tcol].mean())
 
-    # --- KPIs (simple vertical stack; keep typography consistent) ---
+    # --- KPIs (single column stacked) ---
     floating_value_txt = (f"{int(round(float(df[float_col].sum()))):,}명" if float_col else "N/A")
     st.markdown(
         f"""
@@ -244,7 +242,7 @@ def render_population_box(pop_df: pd.DataFrame, *, box_height_px: int = 120):
 # (REQ 2) Place emphasis number+label INSIDE the same chart (just below donut),
 #         not below the container; implemented as layered text.
 # =========================================================
-def render_age_highlight_chart(pop_df: pd.DataFrame, *, box_height_px: int = 120):
+def render_age_highlight_chart(pop_df: pd.DataFrame, *, box_height_px: int = 240):
     df = _norm_cols(pop_df.copy()) if pop_df is not None else pd.DataFrame()
     if df.empty:
         st.info("연령 구성 데이터가 없습니다."); return
@@ -305,9 +303,9 @@ def render_age_highlight_chart(pop_df: pd.DataFrame, *, box_height_px: int = 120
     label_map = {Y: "청년층(18~39세)", M: "중년층(40~59세)", O: "고령층(65세 이상)"}
     idx = labels_order.index(focus)
     pct_txt = f"{(ratios100[idx]):.1f}%"
-    num_font_px = 35
-    lbl_font_px = 18
-    panel_h = 0
+    num_font_px = 28
+    lbl_font_px = 14
+    panel_h = 46
 
     txt_df = pd.DataFrame({"x":[0.5], "y":[0.5], "num":[pct_txt], "lbl":[label_map.get(focus, focus)]})
 
@@ -682,25 +680,11 @@ def render_incumbent_card(cur_row: pd.DataFrame | None):
 
 # =========================================================
 # [Progressive Party Box]
-# HOW TO CHANGE LATER:
-#  - To align total height with other boxes, tweak box_height_px (default 120).
-#  - To move chart closer to text, reduce kpi_h (e.g., 120 → 110) or set padding/top to 0.
-#  - To change chart height only, modify chart_h (computed as box_height_px - kpi_h).
-# (REQ 2) Bring mini bar up near the text and match height with other two boxes.
+# (REQ 5) Match height by splitting KPI (~140) + mini chart (~110).
 # =========================================================
-def render_prg_party_box(
-    prg_row: pd.DataFrame|None=None,
-    pop_row: pd.DataFrame|None=None,
-    *,
-    code: str|int|None=None,
-    region: str|None=None,
-    debug: bool=False,
-    box_height_px: int = 120  # new: control total height to match neighbors
-):
+def render_prg_party_box(prg_row: pd.DataFrame|None=None, pop_row: pd.DataFrame|None=None, *, code: str|int|None=None, region: str|None=None, debug: bool=False):
     with st.container(border=True):
         st.markdown("**진보당 현황**")
-
-        # --- Resolve row (kept identical logic; minimal edits) ---
         if prg_row is None or prg_row.empty:
             df_all = _load_index_df()
             if df_all is None or df_all.empty:
@@ -735,27 +719,21 @@ def render_prg_party_box(
         strength = _to_pct_float(r.get(col_strength)) if col_strength else None
         members  = _to_int(r.get(col_members)) if col_members else None
 
-        # --- KPI block (reduced height & margins to pull chart upward) ---
-        # NOTE: Lowered height from 140 -> 120 and removed extra bottom margin.
-        from streamlit.components.v1 import html as html_component
-        html_component(
-            f"""
-            <div style="display:grid; grid-template-columns: 1fr 1fr; align-items:center; gap:10px; margin-top:2px; margin-bottom:0; padding:0 8px;">
-                <div style="text-align:center; padding:6px 6px;">
-                    <div style="color:#6B7280; font-weight:600; margin-bottom:6px;">진보 득표력</div>
-                    <div style="font-weight:800; color:#111827;">{_fmt_pct(strength) if strength is not None else 'N/A'}</div>
-                </div>
-                <div style="text-align:center; padding:6px 6px;">
-                    <div style="color:#6B7280; font-weight:600; margin-bottom:6px;">진보당 당원수</div>
-                    <div style="font-weight:800; color:#111827;">{(f"{members:,}명" if isinstance(members,int) else "N/A")}</div>
-                </div>
+        html = f"""
+        <div style="display:grid; grid-template-columns: 1fr 1fr; align-items:center; gap:12px; margin-top:2px; margin-bottom:0; padding:0 8px;">
+            <div style="text-align:center; padding:8px 6px;">
+                <div style="color:#6B7280; font-weight:600; margin-bottom:6px;">진보 득표력</div>
+                <div style="font-weight:800; color:#111827;">{_fmt_pct(strength) if strength is not None else 'N/A'}</div>
             </div>
-            """,
-            height=120,  # ↓ was 140
-            scrolling=False
-        )
+            <div style="text-align:center; padding:8px 6px;">
+                <div style="color:#6B7280; font-weight:600; margin-bottom:6px;">진보당 당원수</div>
+                <div style="font-weight:800; color:#111827;">{(f"{members:,}명" if isinstance(members,int) else "N/A")}</div>
+            </div>
+        </div>
+        """
+        from streamlit.components.v1 import html as html_component
+        html_component(html, height=140, scrolling=False)
 
-        # --- Mini bar chart (chart_h fills remaining height; reduced paddings to sit closer) ---
         try:
             avg_strength = None
             if df_all is not None:
@@ -770,14 +748,10 @@ def render_prg_party_box(
                     avg_strength = float(vals.mean()) if vals.notna().any() else None
 
             if strength is not None and avg_strength is not None:
-                s_val = strength/100.0 if strength>1 else strength
-                a_val = (avg_strength/100.0 if avg_strength>1 else avg_strength)
-                bar_df = pd.DataFrame({"항목":["해당 지역","10개 평균"], "값":[s_val, a_val]})
-
-                # Compute chart height to match total box height (mini fills leftover)
-                kpi_h = 120
-                chart_h = max(90, box_height_px - kpi_h)  # floor 90 to avoid tiny chart
-
+                bar_df = pd.DataFrame({
+                    "항목":["해당 지역","10개 평균"],
+                    "값":[strength/100.0 if strength>1 else strength, (avg_strength/100.0 if avg_strength>1 else avg_strength)]
+                })
                 mini = (
                     alt.Chart(bar_df)
                     .mark_bar()
@@ -805,7 +779,6 @@ def render_prg_party_box(
             # Safe no-op: keep box rendering even if mini chart fails
             pass
 
-
 # =========================================================
 # [Region Detail Layout]
 # HOW TO CHANGE LATER:
@@ -827,11 +800,11 @@ def render_region_detail_layout(
     col1, col2, col3 = st.columns([1.0, 1.35, 2.85], gap="small")
 
     with col1.container(border=True, height="stretch"):
-        render_population_box(df_pop, box_height_px=120)
+        render_population_box(df_pop, box_height_px=240)
 
     with col2.container(border=True, height="stretch"):
         st.markdown("**연령 구성**")
-        render_age_highlight_chart(df_pop, box_height_px=120)
+        render_age_highlight_chart(df_pop, box_height_px=240)
 
     with col3.container(border=True, height="stretch"):
         st.markdown("**연령별, 성별 인구분포**")
@@ -848,25 +821,5 @@ def render_region_detail_layout(
         render_incumbent_card(df_cur)
     with c3:
         render_prg_party_box(df_prg, df_pop)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
