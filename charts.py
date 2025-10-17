@@ -415,7 +415,7 @@ def render_vote_trend_chart(ts: pd.DataFrame, *, box_height_px: int = 420):
         else:
             if not (label_col and value_col): st.warning("정당 성향(계열)과 득표율 컬럼이 필요합니다."); return
             long_df = df.rename(columns={label_col:"계열", value_col:"득표율"}).copy()
-            if id_col:     base_e = long_df[id_col].astype(str)
+            if id_col:       base_e = long_df[id_col].astype(str)
             elif year_col: base_e = long_df[year_col].astype(str)
             else: st.warning("선거명을 식별할 컬럼이 필요합니다."); return
 
@@ -476,28 +476,28 @@ def render_vote_trend_chart(ts: pd.DataFrame, *, box_height_px: int = 420):
 
         base = alt.Chart(long_df)
 
-        # English footnote: add detail='계열' so each party draws its own path without cross-connecting.
+        # English footnote: add detail='계열' so each party draws its own path without cross-connection.
         lines = base.mark_line(point=False, strokeWidth=2).encode(
             x=x_shared,
             y=alt.Y("득표율:Q", axis=alt.Axis(title="득표율(%)")),
             color=alt.Color("계열:N", scale=alt.Scale(domain=party_order, range=colors),
-                            legend=alt.Legend(title=None, orient="top", direction="horizontal", columns=4)),
+                                     legend=alt.Legend(title=None, orient="top", direction="horizontal", columns=4)),
             detail="계열:N",
-            order=alt.Order("__xorder__:N")
+            order=alt.Order("__xorder__:O") 
         )
 
         sel = alt.selection_point(fields=["선거명_표시","계열"], nearest=True, on="pointerover", empty=False)
         hit = base.mark_circle(size=650, opacity=0).encode(
             x=x_shared, y="득표율:Q",
             color=alt.Color("계열:N", scale=alt.Scale(domain=party_order, range=colors), legend=None),
-            detail="계열:N", order=alt.Order("__xorder__:N")
+            detail="계열:N", order=alt.Order("__xorder__:O")
         ).add_params(sel)
 
         pts = base.mark_circle(size=120).encode(
             x=x_shared, y="득표율:Q",
             color=alt.Color("계열:N", scale=alt.Scale(domain=party_order, range=colors), legend=None),
             opacity=alt.condition(sel, alt.value(1), alt.value(0)),
-            detail="계열:N", order=alt.Order("__xorder__:N"),
+            detail="계열:N", order=alt.Order("__xorder__:O"), 
             tooltip=[alt.Tooltip("선거명_표시:N", title="선거명"),
                      alt.Tooltip("계열:N", title="계열"),
                      alt.Tooltip("득표율:Q", title="득표율(%)", format=".1f")]
@@ -506,7 +506,7 @@ def render_vote_trend_chart(ts: pd.DataFrame, *, box_height_px: int = 420):
         zoomX = alt.selection_interval(bind='scales', encodings=['x'])
         chart = (lines + hit + pts).properties(height=box_height_px).add_params(zoomX).configure_view(stroke=None)
         st.altair_chart(chart, use_container_width=True, theme=None)
-
+        
 # =========================================================
 # [2024 Results Card]
 # HOW TO CHANGE LATER:
@@ -828,6 +828,7 @@ def render_region_detail_layout(
     
         with c3.container(height="stretch"):
             render_prg_party_box(df_prg, df_pop)
+
 
 
 
