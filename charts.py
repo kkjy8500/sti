@@ -300,9 +300,9 @@ def render_age_highlight_chart(pop_df: pd.DataFrame, *, box_height_px: int = 240
     label_map = {Y: "청년층(18~39세)", M: "중년층(40~59세)", O: "고령층(65세 이상)"}
     idx = labels_order.index(focus)
     pct_txt = f"{(ratios100[idx]):.1f}%"
-    num_font_px = 28
-    lbl_font_px = 14
-    panel_h = 10
+    num_font_px = 35
+    lbl_font_px = 18
+    panel_h = 60
 
     txt_df = pd.DataFrame({"x":[0.5], "y":[0.5], "num":[pct_txt], "lbl":[label_map.get(focus, focus)]})
 
@@ -843,6 +843,7 @@ def render_region_detail_layout(
         render_incumbent_card(df_cur)
     with c3:
         render_prg_party_box(df_prg, df_pop)
+
 
 
 
