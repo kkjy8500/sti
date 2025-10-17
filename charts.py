@@ -483,21 +483,21 @@ def render_vote_trend_chart(ts: pd.DataFrame, *, box_height_px: int = 420):
             color=alt.Color("계열:N", scale=alt.Scale(domain=party_order, range=colors),
                                      legend=alt.Legend(title=None, orient="top", direction="horizontal", columns=4)),
             detail="계열:N",
-            order=alt.Order("__xorder__:O") 
+            order=alt.Order("__xorder__") # ✅ 최종 수정: 데이터 타입 명시 제거
         )
 
         sel = alt.selection_point(fields=["선거명_표시","계열"], nearest=True, on="pointerover", empty=False)
         hit = base.mark_circle(size=650, opacity=0).encode(
             x=x_shared, y="득표율:Q",
             color=alt.Color("계열:N", scale=alt.Scale(domain=party_order, range=colors), legend=None),
-            detail="계열:N", order=alt.Order("__xorder__:O")
+            detail="계열:N", order=alt.Order("__xorder__") # ✅ 최종 수정: 데이터 타입 명시 제거
         ).add_params(sel)
 
         pts = base.mark_circle(size=120).encode(
             x=x_shared, y="득표율:Q",
             color=alt.Color("계열:N", scale=alt.Scale(domain=party_order, range=colors), legend=None),
             opacity=alt.condition(sel, alt.value(1), alt.value(0)),
-            detail="계열:N", order=alt.Order("__xorder__:O"), 
+            detail="계열:N", order=alt.Order("__xorder__"), # ✅ 최종 수정: 데이터 타입 명시 제거
             tooltip=[alt.Tooltip("선거명_표시:N", title="선거명"),
                      alt.Tooltip("계열:N", title="계열"),
                      alt.Tooltip("득표율:Q", title="득표율(%)", format=".1f")]
@@ -828,6 +828,7 @@ def render_region_detail_layout(
     
         with c3.container(height="stretch"):
             render_prg_party_box(df_prg, df_pop)
+
 
 
 
