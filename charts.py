@@ -266,7 +266,7 @@ def render_age_highlight_chart(pop_df: pd.DataFrame, *, box_height_px: int = 180
         "강조": [l == focus for l in labels_order], "순서": [1, 2, 3, 4],
     })
     W = 320
-    H = max(220, int(box_height_px))  # a bit taller to host texts under donut
+    H = max(150, int(box_height_px))  # a bit taller to host texts under donut
 
     # Donut base (⚠️ NOTE: do NOT call .configure_* here; apply it AFTER vconcat)
     base = (
@@ -376,7 +376,7 @@ def render_sex_ratio_bar(pop_df: pd.DataFrame, *, box_height_px: int = 180):
                 alt.Tooltip("연령대내비중:Q", title="연령대 내부 비중", format=".1%"),
             ],
         )
-        .properties(height=240)  # ✅ taller chart
+        .properties(height=180)  # ✅ taller chart
         .configure_view(stroke=None)
     )
     st.altair_chart(bars, use_container_width=True, theme=None)
@@ -700,7 +700,7 @@ def render_prg_party_box(prg_row: pd.DataFrame|None=None, pop_row: pd.DataFrame|
         </div>
         """
         from streamlit.components.v1 import html as html_component
-        html_component(html, height=120, scrolling=False)
+        html_component(html, height=100, scrolling=False)
 
         # --- Mini two-bar (Region vs 10-avg) ---
         try:
@@ -801,6 +801,7 @@ def render_region_detail_layout(
     
         with c3.container(height="stretch"):
             render_prg_party_box(df_prg, df_pop)
+
 
 
 
