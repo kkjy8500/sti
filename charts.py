@@ -266,7 +266,7 @@ def render_age_highlight_chart(pop_df: pd.DataFrame, *, box_height_px: int = 240
 
     # change the height px to change the space between buttons and donut chart
     # HACK: Use markdown to add vertical space (e.g., 10px) between the radio buttons and the chart.
-    st.markdown("<div style='height: 15px;'></div>", unsafe_allow_html=True)  
+    st.markdown("<div style='height: 25px;'></div>", unsafe_allow_html=True)  
 
     # Donut base
     inner_r, outer_r = 68, 106
@@ -302,7 +302,7 @@ def render_age_highlight_chart(pop_df: pd.DataFrame, *, box_height_px: int = 240
     pct_txt = f"{(ratios100[idx]):.1f}%"
     num_font_px = 28
     lbl_font_px = 14
-    panel_h = 46
+    panel_h = 35
 
     txt_df = pd.DataFrame({"x":[0.5], "y":[0.5], "num":[pct_txt], "lbl":[label_map.get(focus, focus)]})
 
@@ -720,17 +720,17 @@ def render_prg_party_box(prg_row: pd.DataFrame|None=None, pop_row: pd.DataFrame|
         html = f"""
         <div style="display:grid; grid-template-columns: 1fr 1fr; align-items:center; gap:12px; margin-top:2px; margin-bottom:0; padding:0 8px;">
             <div style="text-align:center; padding:8px 6px;">
-                <div style="color:#6B7280; font-weight:600; margin-bottom:6px;">진보 득표력</div>
+                <div style="color:#6B7280; font-weight:600; margin-bottom:3px;">진보 득표력</div>
                 <div style="font-weight:800; color:#111827;">{_fmt_pct(strength) if strength is not None else 'N/A'}</div>
             </div>
             <div style="text-align:center; padding:8px 6px;">
-                <div style="color:#6B7280; font-weight:600; margin-bottom:6px;">진보당 당원수</div>
+                <div style="color:#6B7280; font-weight:600; margin-bottom:3px;">진보당 당원수</div>
                 <div style="font-weight:800; color:#111827;">{(f"{members:,}명" if isinstance(members,int) else "N/A")}</div>
             </div>
         </div>
         """
         from streamlit.components.v1 import html as html_component
-        html_component(html, height=140, scrolling=False)
+        html_component(html, height=120, scrolling=False)
 
         # --- Mini two-bar (Region vs 10-avg) ---
         try:
@@ -826,6 +826,7 @@ def render_region_detail_layout(
         render_incumbent_card(df_cur)
     with c3:
         render_prg_party_box(df_prg, df_pop)
+
 
 
 
