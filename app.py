@@ -5,6 +5,11 @@ import streamlit as st
 import pandas as pd
 from pathlib import Path
 
+import importlib
+import charts
+importlib.reload(charts)
+from charts import *
+
 from data_loader import (
     load_population_agg,     # population.csv (구 단위 합계본)
     load_party_labels,       # party_labels.csv
