@@ -264,6 +264,10 @@ def render_age_highlight_chart(pop_df: pd.DataFrame, *, box_height_px: int = 240
 
     focus = st.radio("강조", [Y, M, O], index=0, horizontal=True, label_visibility="collapsed")
 
+    # change the height px to change the space between buttons and donut chart
+    # HACK: Use markdown to add vertical space (e.g., 10px) between the radio buttons and the chart.
+    st.markdown("<div style='height: 15px;'></div>", unsafe_allow_html=True)  
+
     # Donut base
     inner_r, outer_r = 68, 106
     df_vis = pd.DataFrame({
@@ -813,6 +817,7 @@ def render_region_detail_layout(
         render_incumbent_card(df_cur)
     with c3:
         render_prg_party_box(df_prg, df_pop)
+
 
 
 
