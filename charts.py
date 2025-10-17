@@ -214,18 +214,18 @@ def render_population_box(pop_df: pd.DataFrame, *, box_height_px: int = 180):
             y=alt.Y("항목:N", title=None, sort=["해당 지역","10개 평균"]),
             color=alt.Color("색상:N", scale=None, legend=None)
         )
-        .properties(height=bar_h, padding={"left": 10, "top":0,"bottom":0}) 
+        .properties(height=bar_h, padding={"left": 50, "top":0,"bottom":0}) 
         .configure_view(stroke=None)
     )
     st.altair_chart(chart, use_container_width=True, theme=None)
     
 # =========================================================
-# [Age Composition: Half Donut]
+# [Age Composition: Half Donut] – single layered chart (no vconcat)
 # HOW TO CHANGE LATER:
-#  - To move the number/label closer/farther, change text_y_num/text_y_lbl.
-#  - To change sizes, adjust num_font_px / lbl_font_px.
-# (REQ 2) Place emphasis number+label INSIDE the same chart (just below donut),
-#         not below the container; implemented as layered text.
+#  - To tighten/loosen the donut-to-text spacing, tweak TXT_NUM_Y and TXT_LBL_Y (pixel y).
+#  - To resize texts, change NUM_FONT and LBL_FONT.
+#  - To change donut size, adjust inner_r / outer_r.
+#  - We avoid vconcat to prevent Altair v5 subtype TypeError; everything is layered in one chart.
 # =========================================================
 def render_age_highlight_chart(pop_df: pd.DataFrame, *, box_height_px: int = 180):
     df = _norm_cols(pop_df.copy()) if pop_df is not None else pd.DataFrame()
@@ -242,11 +242,13 @@ def render_age_highlight_chart(pop_df: pd.DataFrame, *, box_height_px: int = 180
         st.info("'전체 유권자 수' 컬럼이 없습니다."); return
 
     for c in [Y, M, O, total_col]:
-        df[c] = pd.to_numeric(df[c].astype(str).str.replace(",", "", regex=False).str.strip(), errors="coerce").fillna(0)
+        df[c] = pd.to_numeric(df[c].astype(str).str.replace(",", "", regex=False).str.strip(),
+                              errors="coerce").fillna(0)
 
     y, m, o = float(df[Y].sum()), float(df[M].sum()), float(df[O].sum())
     tot = float(df[total_col].sum())
-    if tot <= 0: st.info("전체 유권자 수(분모)가 0입니다."); return
+    if tot <= 0:
+        st.info("전체 유권자 수(분모)가 0입니다."); return
 
     mid_60_64 = max(0.0, tot - (y + m + o))
     labels_order = [Y, M, "60–64세", O]
@@ -256,58 +258,78 @@ def render_age_highlight_chart(pop_df: pd.DataFrame, *, box_height_px: int = 180
 
     focus = st.radio("강조", [Y, M, O], index=0, horizontal=True, label_visibility="collapsed")
 
-    # change the height px to change the space between buttons and donut chart
-    # HACK: Use markdown to add vertical space (e.g., 10px) between the radio buttons and the chart.
-    st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)  
+    # small visual spacer under the radio
+    st.markdown("<div style='height: 6px;'></div>", unsafe_allow_html=True)  # English footnote: tweak this to change top margin.
 
-    # Donut base
+    # --- Donut sizing & canvas ---
     inner_r, outer_r = 68, 106
+    W = 320
+    # English footnote: keep a fixed height so the container doesn't jump when switching focus.
+    H = max(220, int(box_height_px))
+
     df_vis = pd.DataFrame({
         "연령": labels_order, "명": values, "비율": ratios01, "표시비율": ratios100,
         "강조": [l == focus for l in labels_order], "순서": [1, 2, 3, 4],
     })
-    W = 320
-    H = max(180, int(box_height_px))  # a bit taller to host texts under donut
 
-    # Donut base (⚠️ NOTE: do NOT call .configure_* here; apply it AFTER vconcat)
     base = (
-        alt.Chart(df_vis)
-        .mark_arc(innerRadius=inner_r, outerRadius=outer_r, cornerRadius=6, stroke="white", strokeWidth=1)
+        alt.Chart(df_vis, width=W, height=H)
+        .mark_arc(innerRadius=inner_r, outerRadius=outer_r, cornerRadius=6,
+                  stroke="white", strokeWidth=1)
         .encode(
-            theta=alt.Theta("비율:Q", stack=True, sort=None, scale=alt.Scale(range=[-math.pi/2, math.pi/2])),
+            theta=alt.Theta("비율:Q", stack=True, sort=None,
+                            scale=alt.Scale(range=[-math.pi/2, math.pi/2])),
             order=alt.Order("순서:Q"),
-            color=alt.Color("강조:N", scale=alt.Scale(domain=[True, False], range=[COLOR_BLUE, "#E5E7EB"]), legend=None),
-            tooltip=[alt.Tooltip("연령:N", title="연령대"),
-                     alt.Tooltip("명:Q", title="인원", format=",.0f"),
-                     alt.Tooltip("표시비율:Q", title="비율(%)", format=".1f")],
+            color=alt.Color("강조:N",
+                            scale=alt.Scale(domain=[True, False], range=[COLOR_BLUE, "#E5E7EB"]),
+                            legend=None),
+            tooltip=[
+                alt.Tooltip("연령:N", title="연령대"),
+                alt.Tooltip("명:Q", title="인원", format=",.0f"),
+                alt.Tooltip("표시비율:Q", title="비율(%)", format=".1f"),
+            ],
         )
-        .properties(width=W, height=H)
-        .properties(padding={"top": 20}) 
     )
 
-    # Robust caption inside the chart area using a tiny vconcat text panel
-    # - panel_h controls spacing under donut (smaller = tighter).
+    # --- Emphasis texts (absolute positioning via alt.value) ---
     label_map = {Y: "청년층(18~39세)", M: "중년층(40~59세)", O: "고령층(65세 이상)"}
     idx = labels_order.index(focus)
     pct_txt = f"{(ratios100[idx]):.1f}%"
-    num_font_px = 28
-    lbl_font_px = 14
-    panel_h = 20 
-    
-    txt_df = pd.DataFrame({"x":[0.5], "y":[0.5], "num":[pct_txt], "lbl":[label_map.get(focus, focus)]})
-    
-    num = alt.Chart(txt_df).mark_text(fontWeight="bold", fontSize=num_font_px, color="#0f172a") \
-        .encode(x=alt.X("x:Q", scale=alt.Scale(domain=[0,1]), axis=None),
-                y=alt.Y("y:Q", scale=alt.Scale(domain=[0,1]), axis=None),
-                text="num:N")
-    lbl = alt.Chart(txt_df).mark_text(fontSize=lbl_font_px, color="#475569", dy=26) \
-        .encode(x=alt.X("x:Q", scale=alt.Scale(domain=[0,1]), axis=None),
-                y=alt.Y("y:Q", scale=alt.Scale(domain=[0,1]), axis=None),
-                text="lbl:N")
-        
-    text_panel = (num + lbl).properties(height=panel_h)
-    chart_all = alt.vconcat(base, text_panel).resolve_scale(x="independent", y="independent") \
-        .properties(spacing=0).configure_view(stroke=None)
+
+    NUM_FONT, LBL_FONT = 28, 14
+    # English footnote: Move these up/down to control the donut-to-text spacing without changing chart layout.
+    TXT_NUM_Y = outer_r + 30   # pixels from top
+    TXT_LBL_Y = outer_r + 54
+
+    num_text = (
+        alt.Chart(pd.DataFrame({"t":[pct_txt]}))
+        .mark_text(fontWeight="bold", fontSize=NUM_FONT, color="#0f172a")
+        .encode(text="t:N")
+        .properties(width=W, height=H)
+        .encode()  # no-op; keeps the API symmetric
+        .transform_calculate(dummy="0")  # English footnote: no data dependency; pure overlay.
+        .mark_text(fontWeight="bold", fontSize=NUM_FONT, color="#0f172a")
+        .encode(text="t:N")
+        .properties(width=W, height=H)
+        .configure_view(stroke=None)
+    ).encode()
+
+    # set absolute positions
+    num_text.encoding.x = alt.Value(W/2)
+    num_text.encoding.y = alt.Value(TXT_NUM_Y)
+
+    lbl_text = (
+        alt.Chart(pd.DataFrame({"t":[label_map.get(focus, focus)]}))
+        .mark_text(fontSize=LBL_FONT, color="#475569")
+        .encode(text="t:N")
+        .properties(width=W, height=H)
+        .configure_view(stroke=None)
+    )
+    lbl_text.encoding.x = alt.Value(W/2)
+    lbl_text.encoding.y = alt.Value(TXT_LBL_Y)
+
+    chart_all = (base + num_text + lbl_text).configure_view(stroke=None)
+
     st.altair_chart(chart_all, use_container_width=True, theme=None)
     
 # =========================================================
@@ -802,7 +824,7 @@ def render_region_detail_layout(
     # --- 인구 정보 섹션: 3박스 높이 동일 (stretch) ---
     st.markdown("### 👥 인구 정보")
     with st.container():
-        col1, col2, col3 = st.columns([1.0, 1.35, 2.85], gap="small")
+        col1, col2, col3 = st.columns([1.25, 1.35, 2.85], gap="small")
 
         with col1.container(border=True, height="stretch"):
             render_population_box(df_pop)
@@ -832,6 +854,7 @@ def render_region_detail_layout(
     
         with c3.container(height="stretch"):
             render_prg_party_box(df_prg, df_pop)
+
 
 
 
