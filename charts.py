@@ -127,13 +127,13 @@ def _party_chip_color(name: str) -> tuple[str, str]:
 # =========================================================
 # [Population Box] KPI + two-bars (Region vs 10-avg)
 # HOW TO CHANGE LATER:
-#  - To change total height, adjust box_height_px (default 240).
+#  - To change total height, adjust box_height_px (default 120).
 #  - To change bar height only, tweak bar_h (kept separate from box height).
 #  - Colors: region = COLOR_BLUE, 10-avg = gray (#9CA3AF). Edit in 'color' if needed.
 #  - Number format: x-axis "~," (comma). Change axis format in alt.Axis(format="~,").
 # (REQ 1) Two bars: blue = region, gray = 10-avg. Same visual settings as Progressive box.
 # =========================================================
-def render_population_box(pop_df: pd.DataFrame, *, box_height_px: int = 240):
+def render_population_box(pop_df: pd.DataFrame, *, box_height_px: int = 120):
     if pop_df is None or pop_df.empty:
         st.info("유동인구/연령/성비 차트를 위한 데이터가 없습니다.")
         return
@@ -244,7 +244,7 @@ def render_population_box(pop_df: pd.DataFrame, *, box_height_px: int = 240):
 # (REQ 2) Place emphasis number+label INSIDE the same chart (just below donut),
 #         not below the container; implemented as layered text.
 # =========================================================
-def render_age_highlight_chart(pop_df: pd.DataFrame, *, box_height_px: int = 240):
+def render_age_highlight_chart(pop_df: pd.DataFrame, *, box_height_px: int = 120):
     df = _norm_cols(pop_df.copy()) if pop_df is not None else pd.DataFrame()
     if df.empty:
         st.info("연령 구성 데이터가 없습니다."); return
@@ -683,7 +683,7 @@ def render_incumbent_card(cur_row: pd.DataFrame | None):
 # =========================================================
 # [Progressive Party Box]
 # HOW TO CHANGE LATER:
-#  - To align total height with other boxes, tweak box_height_px (default 240).
+#  - To align total height with other boxes, tweak box_height_px (default 120).
 #  - To move chart closer to text, reduce kpi_h (e.g., 120 → 110) or set padding/top to 0.
 #  - To change chart height only, modify chart_h (computed as box_height_px - kpi_h).
 # (REQ 2) Bring mini bar up near the text and match height with other two boxes.
@@ -695,7 +695,7 @@ def render_prg_party_box(
     code: str|int|None=None,
     region: str|None=None,
     debug: bool=False,
-    box_height_px: int = 240  # new: control total height to match neighbors
+    box_height_px: int = 120  # new: control total height to match neighbors
 ):
     with st.container(border=True):
         st.markdown("**진보당 현황**")
@@ -827,11 +827,11 @@ def render_region_detail_layout(
     col1, col2, col3 = st.columns([1.0, 1.35, 2.85], gap="small")
 
     with col1.container(border=True, height="stretch"):
-        render_population_box(df_pop, box_height_px=240)
+        render_population_box(df_pop, box_height_px=120)
 
     with col2.container(border=True, height="stretch"):
         st.markdown("**연령 구성**")
-        render_age_highlight_chart(df_pop, box_height_px=240)
+        render_age_highlight_chart(df_pop, box_height_px=120)
 
     with col3.container(border=True, height="stretch"):
         st.markdown("**연령별, 성별 인구분포**")
@@ -848,6 +848,7 @@ def render_region_detail_layout(
         render_incumbent_card(df_cur)
     with c3:
         render_prg_party_box(df_prg, df_pop)
+
 
 
 
