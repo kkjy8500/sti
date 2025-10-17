@@ -275,7 +275,7 @@ def render_age_highlight_chart(pop_df: pd.DataFrame, *, box_height_px: int = 240
         "강조": [l == focus for l in labels_order], "순서": [1, 2, 3, 4],
     })
     W = 320
-    H = max(260, int(box_height_px))  # a bit taller to host texts under donut
+    H = max(220, int(box_height_px))  # a bit taller to host texts under donut
 
     # Donut base (⚠️ NOTE: do NOT call .configure_* here; apply it AFTER vconcat)
     base = (
@@ -304,7 +304,7 @@ def render_age_highlight_chart(pop_df: pd.DataFrame, *, box_height_px: int = 240
     lbl_font_px = 18
     panel_h = 0
 
-    txt_df = pd.DataFrame({"x":[0.5], "y":[0.8], "num":[pct_txt], "lbl":[label_map.get(focus, focus)]})
+    txt_df = pd.DataFrame({"x":[0.5], "y":[0.5], "num":[pct_txt], "lbl":[label_map.get(focus, focus)]})
 
     num = (
         alt.Chart(txt_df)
@@ -843,6 +843,7 @@ def render_region_detail_layout(
         render_incumbent_card(df_cur)
     with c3:
         render_prg_party_box(df_prg, df_pop)
+
 
 
 
