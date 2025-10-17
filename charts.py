@@ -127,9 +127,11 @@ def _party_chip_color(name: str) -> tuple[str, str]:
 # =========================================================
 # [Population Box] KPI + two-bars (Region vs 10-avg)
 # HOW TO CHANGE LATER:
-#  - To switch back to ratio bar, set use_two_bars=False (kept logic).
-#  - To adjust bar height, tweak bar_h (e.g., 150~190).
-# (REQ 1) Two bars: blue = region, gray = 10-avg.
+#  - To change total height, adjust box_height_px (default 240).
+#  - To change bar height only, tweak bar_h (kept separate from box height).
+#  - Colors: region = COLOR_BLUE, 10-avg = gray (#9CA3AF). Edit in 'color' if needed.
+#  - Number format: x-axis "~," (comma). Change axis format in alt.Axis(format="~,").
+# (REQ 1) Two bars: blue = region, gray = 10-avg. Same visual settings as Progressive box.
 # =========================================================
 def render_population_box(pop_df: pd.DataFrame, *, box_height_px: int = 240):
     if pop_df is None or pop_df.empty:
@@ -156,14 +158,14 @@ def render_population_box(pop_df: pd.DataFrame, *, box_height_px: int = 240):
     df[total_col] = df[total_col].apply(_to_num)
     if float_col: df[float_col] = df[float_col].apply(_to_num)
 
-    # Region total
+    # --- Region aggregate (kept robust to multi-rows per region) ---
     if code_col:
         grp = df.groupby(code_col, dropna=False)[[total_col]].sum(min_count=1).reset_index()
         region_total = float(grp[total_col].iloc[0]); region_cnt = int(grp.shape[0])
     else:
         region_total = float(df[total_col].sum());    region_cnt = 1
 
-    # 10-avg fallback loader
+    # --- 10-avg fallback (when single region given) ---
     avg_total = None
     if region_cnt >= 2:
         avg_total = float(df.groupby(code_col, dropna=False)[total_col].sum().mean())
@@ -176,7 +178,7 @@ def render_population_box(pop_df: pd.DataFrame, *, box_height_px: int = 240):
                 pop_all[tcol] = pop_all[tcol].apply(_to_num)
                 avg_total = float(pop_all.groupby(ccol, dropna=False)[tcol].sum().mean()) if ccol else float(pop_all[tcol].mean())
 
-    # --- KPIs (single column stacked) ---
+    # --- KPIs (simple vertical stack; keep typography consistent) ---
     floating_value_txt = (f"{int(round(float(df[float_col].sum()))):,}명" if float_col else "N/A")
     st.markdown(
         f"""
@@ -194,9 +196,9 @@ def render_population_box(pop_df: pd.DataFrame, *, box_height_px: int = 240):
         unsafe_allow_html=True,
     )
 
-    # --- (REQ 1) Two-bar chart (Region vs 10-avg) ---
+    # --- Two-bar chart (match Progressive mini chart style; numbers instead of %) ---
     use_two_bars = True
-    bar_h = 170  # ↑ slightly higher to fill container
+    bar_h = 110  # keep same feel as Progressive mini chart; raise/lower if needed
     if use_two_bars:
         if isinstance(avg_total,(int,float)) and avg_total and avg_total>0:
             bar_df = pd.DataFrame({"항목": ["해당 지역", "10개 평균"], "값": [float(region_total), float(avg_total)]})
@@ -209,16 +211,24 @@ def render_population_box(pop_df: pd.DataFrame, *, box_height_px: int = 240):
             alt.Chart(bar_df)
             .mark_bar()
             .encode(
-                y=alt.Y("항목:N", title=None, axis=alt.Axis(labels=True, ticks=False)),
-                x=alt.X("값:Q", title=None, axis=alt.Axis(format="~,"), scale=alt.Scale(domain=[0, x_max])),
+                x=alt.X(
+                    "값:Q",
+                    axis=alt.Axis(format="~,", title=None),  # comma formatting (diff from %)
+                    scale=alt.Scale(domain=[0, x_max])
+                ),
+                y=alt.Y("항목:N", title=None),
                 color=alt.condition(
                     alt.datum.항목 == "해당 지역",
-                    alt.value(COLOR_BLUE),
-                    alt.value("#9CA3AF")  # gray for 10-avg
+                    alt.value(COLOR_BLUE),        # same blue as Progressive box
+                    alt.value("#9CA3AF")          # gray for 10-avg
                 ),
-                tooltip=[alt.Tooltip("항목:N", title="구분"), alt.Tooltip("값:Q", title="유권자수", format=",.0f")],
+                tooltip=[
+                    alt.Tooltip("항목:N", title="구분"),
+                    alt.Tooltip("값:Q", title="유권자수", format=",.0f")
+                ]
             )
-        ).properties(height=bar_h, padding={"left":0, "right":0, "top":4, "bottom":2}).configure_view(stroke=None)
+        ).properties(height=bar_h, padding={"top":0, "bottom":0, "left":0, "right":0}).configure_view(stroke=None)
+
         st.altair_chart(chart, use_container_width=True, theme=None)
 
 # =========================================================
@@ -667,11 +677,25 @@ def render_incumbent_card(cur_row: pd.DataFrame | None):
 
 # =========================================================
 # [Progressive Party Box]
-# (REQ 5) Match height by splitting KPI (~140) + mini chart (~110).
+# HOW TO CHANGE LATER:
+#  - To align total height with other boxes, tweak box_height_px (default 240).
+#  - To move chart closer to text, reduce kpi_h (e.g., 120 → 110) or set padding/top to 0.
+#  - To change chart height only, modify chart_h (computed as box_height_px - kpi_h).
+# (REQ 2) Bring mini bar up near the text and match height with other two boxes.
 # =========================================================
-def render_prg_party_box(prg_row: pd.DataFrame|None=None, pop_row: pd.DataFrame|None=None, *, code: str|int|None=None, region: str|None=None, debug: bool=False):
+def render_prg_party_box(
+    prg_row: pd.DataFrame|None=None,
+    pop_row: pd.DataFrame|None=None,
+    *,
+    code: str|int|None=None,
+    region: str|None=None,
+    debug: bool=False,
+    box_height_px: int = 240  # new: control total height to match neighbors
+):
     with st.container(border=True):
         st.markdown("**진보당 현황**")
+
+        # --- Resolve row (kept identical logic; minimal edits) ---
         if prg_row is None or prg_row.empty:
             df_all = _load_index_df()
             if df_all is None or df_all.empty:
@@ -706,21 +730,27 @@ def render_prg_party_box(prg_row: pd.DataFrame|None=None, pop_row: pd.DataFrame|
         strength = _to_pct_float(r.get(col_strength)) if col_strength else None
         members  = _to_int(r.get(col_members)) if col_members else None
 
-        html = f"""
-        <div style="display:grid; grid-template-columns: 1fr 1fr; align-items:center; gap:12px; margin-top:2px; margin-bottom:0; padding:0 8px;">
-            <div style="text-align:center; padding:8px 6px;">
-                <div style="color:#6B7280; font-weight:600; margin-bottom:6px;">진보 득표력</div>
-                <div style="font-weight:800; color:#111827;">{_fmt_pct(strength) if strength is not None else 'N/A'}</div>
-            </div>
-            <div style="text-align:center; padding:8px 6px;">
-                <div style="color:#6B7280; font-weight:600; margin-bottom:6px;">진보당 당원수</div>
-                <div style="font-weight:800; color:#111827;">{(f"{members:,}명" if isinstance(members,int) else "N/A")}</div>
-            </div>
-        </div>
-        """
+        # --- KPI block (reduced height & margins to pull chart upward) ---
+        # NOTE: Lowered height from 140 -> 120 and removed extra bottom margin.
         from streamlit.components.v1 import html as html_component
-        html_component(html, height=140, scrolling=False)
+        html_component(
+            f"""
+            <div style="display:grid; grid-template-columns: 1fr 1fr; align-items:center; gap:10px; margin-top:2px; margin-bottom:0; padding:0 8px;">
+                <div style="text-align:center; padding:6px 6px;">
+                    <div style="color:#6B7280; font-weight:600; margin-bottom:6px;">진보 득표력</div>
+                    <div style="font-weight:800; color:#111827;">{_fmt_pct(strength) if strength is not None else 'N/A'}</div>
+                </div>
+                <div style="text-align:center; padding:6px 6px;">
+                    <div style="color:#6B7280; font-weight:600; margin-bottom:6px;">진보당 당원수</div>
+                    <div style="font-weight:800; color:#111827;">{(f"{members:,}명" if isinstance(members,int) else "N/A")}</div>
+                </div>
+            </div>
+            """,
+            height=120,  # ↓ was 140
+            scrolling=False
+        )
 
+        # --- Mini bar chart (chart_h fills remaining height; reduced paddings to sit closer) ---
         try:
             avg_strength = None
             if df_all is not None:
@@ -735,21 +765,21 @@ def render_prg_party_box(prg_row: pd.DataFrame|None=None, pop_row: pd.DataFrame|
                     avg_strength = float(vals.mean()) if vals.notna().any() else None
 
             if strength is not None and avg_strength is not None:
-                bar_df = pd.DataFrame({
-                    "항목":["해당 지역","10개 평균"],
-                    "값":[strength/100.0 if strength>1 else strength, (avg_strength/100.0 if avg_strength>1 else avg_strength)]
-                })
+                s_val = strength/100.0 if strength>1 else strength
+                a_val = (avg_strength/100.0 if avg_strength>1 else avg_strength)
+                bar_df = pd.DataFrame({"항목":["해당 지역","10개 평균"], "값":[s_val, a_val]})
+
+                # Compute chart height to match total box height (mini fills leftover)
+                kpi_h = 120
+                chart_h = max(90, box_height_px - kpi_h)  # floor 90 to avoid tiny chart
+
                 mini = (
                     alt.Chart(bar_df)
                     .mark_bar()
                     .encode(
                         x=alt.X(
                             "값:Q",
-                            axis=alt.Axis(
-                                format=".00%",        
-                                values=[i/100 for i in range(0, 101, 2)],  
-                                title=None           
-                            ),
+                            axis=alt.Axis(format=".00%", title=None),
                             scale=alt.Scale(domain=[0, max(bar_df["값"])*1.1])
                         ),
                         y=alt.Y("항목:N", title=None),
@@ -763,9 +793,11 @@ def render_prg_party_box(prg_row: pd.DataFrame|None=None, pop_row: pd.DataFrame|
                             alt.Tooltip("값:Q", title="득표력", format=".1%")
                         ]
                     )
-                ).properties(height=110, padding={"top":0, "bottom":0, "left":0, "right":0}).configure_view(stroke=None)
+                ).properties(height=chart_h, padding={"top":0, "bottom":0, "left":0, "right":0}).configure_view(stroke=None)
+
                 st.altair_chart(mini, use_container_width=True, theme=None)
         except Exception:
+            # Safe no-op: keep box rendering even if mini chart fails
             pass
 
 
@@ -811,6 +843,7 @@ def render_region_detail_layout(
         render_incumbent_card(df_cur)
     with c3:
         render_prg_party_box(df_prg, df_pop)
+
 
 
 
