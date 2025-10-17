@@ -759,10 +759,18 @@ def render_prg_party_box(prg_row: pd.DataFrame|None=None, pop_row: pd.DataFrame|
                     alt.Chart(bar_df)
                     .mark_bar()
                     .encode(
-                        x=alt.X("값:Q",
-                                axis=alt.Axis(format=".0%"),
-                                scale=alt.Scale(domain=[0, float(bar_df["값"].max())*1.1])),
-                        y=alt.Y("항목:N", title=None, sort=["해당 지역","10개 평균"]),
+                        x=alt.X(
+                            "값:Q",
+                            # ✅ change: remove title text & fix tick step at 2% intervals
+                            axis=alt.Axis(
+                                title=None,          # remove "값" label under axis
+                                format=".0%",
+                                values=[v/100 for v in range(0, 101, 2)],  # tick every 2%
+                                labelFlush=False
+                            ),
+                            scale=alt.Scale(domain=[0, float(bar_df["값"].max())*1.1], nice=False)
+                        ),
+                        y=alt.Y("항목:N", title=None, sort=["해당 지역", "10개 평균"]),
                         color=alt.Color("색상:N", scale=None, legend=None),
                         tooltip=[alt.Tooltip("항목:N"), alt.Tooltip("값:Q", format=".1%")]
                     )
@@ -770,6 +778,7 @@ def render_prg_party_box(prg_row: pd.DataFrame|None=None, pop_row: pd.DataFrame|
                     .configure_view(stroke=None)
                 )
                 st.altair_chart(mini, use_container_width=True, theme=None)
+                
         except Exception:
             # Keep silent to avoid breaking the whole page
             pass
@@ -817,6 +826,7 @@ def render_region_detail_layout(
         render_incumbent_card(df_cur)
     with c3:
         render_prg_party_box(df_prg, df_pop)
+
 
 
 
