@@ -267,6 +267,7 @@ def render_age_highlight_chart(pop_df: pd.DataFrame, *, box_height_px: int = 240
     W = 320
     H = max(220, int(box_height_px))  # a bit taller to host texts under donut
 
+    # Donut base (⚠️ NOTE: do NOT call .configure_* here; apply it AFTER vconcat)
     base = (
         alt.Chart(df_vis)
         .mark_arc(innerRadius=inner_r, outerRadius=outer_r, cornerRadius=6, stroke="white", strokeWidth=1)
@@ -279,23 +280,21 @@ def render_age_highlight_chart(pop_df: pd.DataFrame, *, box_height_px: int = 240
                      alt.Tooltip("표시비율:Q", title="비율(%)", format=".1f")],
         )
         .properties(width=W, height=H)
-        .configure_view(stroke=None)
+        # .configure_view(stroke=None)  # <-- ❌ remove here: config on subchart causes TypeError in vconcat
     )
 
-    # - We use a separate 0~1 normalized coord system to avoid pixel math & clipping.
-    # - Edit num_font_px/lbl_font_px to resize; edit panel_h to move them closer/farther.
+    # Robust caption inside the chart area using a tiny vconcat text panel
+    # English footnotes:
+    # - Use 0~1 normalized coords to avoid pixel math & clipping on resize.
+    # - Change panel_h to adjust spacing under the donut; num_font_px/lbl_font_px to resize texts.
     label_map = {Y: "청년층(18~39세)", M: "중년층(40~59세)", O: "고령층(65세 이상)"}
     idx = labels_order.index(focus)
     pct_txt = f"{(ratios100[idx]):.1f}%"
-    num_font_px = 28  # ↑ number size
-    lbl_font_px = 14  # ↑ label size
-    panel_h = 46      # ↑/↓ to change spacing under the donut
+    num_font_px = 28
+    lbl_font_px = 14
+    panel_h = 46
 
-    txt_df = pd.DataFrame({
-        "x":[0.5], "y":[0.5],
-        "num":[pct_txt],
-        "lbl":[label_map.get(focus, focus)]
-    })
+    txt_df = pd.DataFrame({"x":[0.5], "y":[0.5], "num":[pct_txt], "lbl":[label_map.get(focus, focus)]})
 
     num = (
         alt.Chart(txt_df)
@@ -315,14 +314,15 @@ def render_age_highlight_chart(pop_df: pd.DataFrame, *, box_height_px: int = 240
             text="lbl:N"
         )
     )
-
     text_panel = (num + lbl).properties(height=panel_h)
 
-    # vconcat keeps both inside one Altair figure (so it feels “inside the canvas”)
-    chart_all = alt.vconcat(
-        base,
-        text_panel
-    ).resolve_scale(x="independent", y="independent").properties(spacing=0)
+    # Concat first, THEN apply any configure_* at top-level
+    chart_all = (
+        alt.vconcat(base, text_panel)
+        .resolve_scale(x="independent", y="independent")
+        .properties(spacing=0)
+        .configure_view(stroke=None)  # ✅ top-level config is safe here
+    )
 
     st.altair_chart(chart_all, use_container_width=True, theme=None)
 
@@ -795,4 +795,5 @@ def render_region_detail_layout(
         render_incumbent_card(df_cur)
     with c3:
         render_prg_party_box(df_prg, df_pop)
+
 
