@@ -167,7 +167,8 @@ def render_population_box(pop_df: pd.DataFrame, *, box_height_px: int = 180):
         region_total = float(df[total_col].sum())
 
     # Fallback: load master for 10-avg
-    pop_all = _load_population_master()
+    # pop_all = _load_population_master()
+    pop_all = None # 임시 주석 처리 또는 적절한 함수 호출로 대체
     avg_total = None
     if pop_all is not None:
         tcol = next((c for c in CAND_TOTAL if c in pop_all.columns), None)
@@ -209,15 +210,15 @@ def render_population_box(pop_df: pd.DataFrame, *, box_height_px: int = 180):
         .mark_bar()
         .encode(
             x=alt.X("값:Q", axis=alt.Axis(format="~,", title=None),
-                    scale=alt.Scale(domain=[0, max(bar_df["값"].max(), 1)*1.1])),
+                     scale=alt.Scale(domain=[0, max(bar_df["값"].max(), 1)*1.1])),
             y=alt.Y("항목:N", title=None, sort=["해당 지역","10개 평균"]),
             color=alt.Color("색상:N", scale=None, legend=None)
         )
-        .properties(height=bar_h, padding={"top":0,"bottom":0})
+        .properties(height=bar_h, padding={"left": 10, "top":0,"bottom":0}) 
         .configure_view(stroke=None)
     )
     st.altair_chart(chart, use_container_width=True, theme=None)
-
+    
 # =========================================================
 # [Age Composition: Half Donut]
 # HOW TO CHANGE LATER:
@@ -281,6 +282,7 @@ def render_age_highlight_chart(pop_df: pd.DataFrame, *, box_height_px: int = 180
                      alt.Tooltip("표시비율:Q", title="비율(%)", format=".1f")],
         )
         .properties(width=W, height=H)
+        .properties(padding={"top": 20}) 
     )
 
     # Robust caption inside the chart area using a tiny vconcat text panel
@@ -290,7 +292,7 @@ def render_age_highlight_chart(pop_df: pd.DataFrame, *, box_height_px: int = 180
     pct_txt = f"{(ratios100[idx]):.1f}%"
     num_font_px = 28
     lbl_font_px = 14
-    panel_h = -20  # ✅ reduce gap between donut and text
+    panel_h = 20 
     
     txt_df = pd.DataFrame({"x":[0.5], "y":[0.5], "num":[pct_txt], "lbl":[label_map.get(focus, focus)]})
     
@@ -302,12 +304,12 @@ def render_age_highlight_chart(pop_df: pd.DataFrame, *, box_height_px: int = 180
         .encode(x=alt.X("x:Q", scale=alt.Scale(domain=[0,1]), axis=None),
                 y=alt.Y("y:Q", scale=alt.Scale(domain=[0,1]), axis=None),
                 text="lbl:N")
-    
+        
     text_panel = (num + lbl).properties(height=panel_h)
     chart_all = alt.vconcat(base, text_panel).resolve_scale(x="independent", y="independent") \
         .properties(spacing=0).configure_view(stroke=None)
     st.altair_chart(chart_all, use_container_width=True, theme=None)
-
+    
 # =========================================================
 # [Sex Composition by Age: Horizontal Bars]
 # HOW TO CHANGE LATER:
@@ -385,12 +387,13 @@ def render_sex_ratio_bar(pop_df: pd.DataFrame, *, box_height_px: int = 340):
     st.altair_chart(bars, use_container_width=True, theme=None)
 
 # =========================================================
-# [Vote Trend by Ideology]
+# [Vote Trend by Ideology] – fixed global x-order + line order
 # HOW TO CHANGE LATER:
-#  - Adjust hover hitbox via HIT_SIZE.
-#  - Move legend by Legend(orient=...).
-#  - Zoom/pan: interval selection bound to scales on X (robust).
-# (REQ 4) Scroll (wheel) & drag zoom on X kept via selection_interval.
+#  - To change the global x-axis order, edit ORDER_LABELS below.
+#  - To ensure lines connect in the same order, we sort long_df by __xorder__ and also set `order=...`.
+#  - If your source is wide-form (민주/보수/진보/기타), keep `wide_cols` detection as-is.
+#  - If you add new elections, extend `CODE`->to_kr() and append to ORDER_LABELS.
+#  - Zoom/pan is preserved via selection_interval on X.
 # =========================================================
 def render_vote_trend_chart(ts: pd.DataFrame, *, box_height_px: int = 420):
     with st.container(border=True):  # outer border (Streamlit >= 1.31)
@@ -406,6 +409,7 @@ def render_vote_trend_chart(ts: pd.DataFrame, *, box_height_px: int = 420):
         id_col   = next((c for c in ["선거명","election","분류","연도","year"] if c in df.columns), None)
         year_col = next((c for c in ["연도","year"] if c in df.columns), None)
 
+        # --- Robust long-form build (works for wide or long) ---
         if wide_cols:
             if not id_col: st.warning("선거명을 식별할 컬럼이 필요합니다."); return
             long_df = df.melt(id_vars=id_col, value_vars=wide_cols, var_name="계열", value_name="득표율")
@@ -417,6 +421,7 @@ def render_vote_trend_chart(ts: pd.DataFrame, *, box_height_px: int = 420):
             elif year_col: base_e = long_df[year_col].astype(str)
             else: st.warning("선거명을 식별할 컬럼이 필요합니다."); return
 
+        # --- Canonical label mapping (code/token -> Korean display) ---
         def _norm_token(s: str) -> str:
             s = str(s).strip().replace("-","_").replace(" ","_").upper()
             return re.sub(r"_+","_", s)
@@ -434,15 +439,34 @@ def render_vote_trend_chart(ts: pd.DataFrame, *, box_height_px: int = 420):
         long_df["선거명_표시"] = base_e.apply(to_kr)
         long_df = long_df.dropna(subset=["선거명_표시","계열","득표율"]).copy()
 
-        order = long_df["선거명_표시"].astype(str).dropna().unique().tolist()
+        # --- Global x-axis order (same for every region) ---
+        ORDER_LABELS = [
+            "2016 총선 비례",
+            "2017 대선",
+            "2018 광역단체장",
+            "2018 광역 비례",
+            "2020 총선 비례",
+            "2022 대선",
+            "2022 광역단체장",
+            "2022 광역 비례",
+            "2024 총선 비례",
+            "2025 대선",
+        ]
+
+        # --- Filter to domain & enforce categorical order for proper line connection ---
+        long_df = long_df[long_df["선거명_표시"].isin(ORDER_LABELS)].copy()
+        long_df["__xorder__"] = pd.Categorical(long_df["선거명_표시"], categories=ORDER_LABELS, ordered=True)
+        long_df = long_df.sort_values(["계열","__xorder__"]).reset_index(drop=True)
+
         party_order = ["민주","보수","진보","기타"]
         color_map   = {"민주":"#152484", "보수":"#E61E2B", "진보":"#7B2CBF", "기타":"#6C757D"}
         colors      = [color_map[p] for p in party_order]
 
+        # --- Shared x scale/domain (fixed order) ---
         x_shared = alt.X(
             "선거명_표시:N",
             sort=None,
-            scale=alt.Scale(domain=order),
+            scale=alt.Scale(domain=ORDER_LABELS),  # fixed global domain
             axis=alt.Axis(labelAngle=-32, labelOverlap=False, labelPadding=20, labelLimit=280, title="선거명")
         )
 
@@ -454,15 +478,18 @@ def render_vote_trend_chart(ts: pd.DataFrame, *, box_height_px: int = 420):
                 "계열:N",
                 scale=alt.Scale(domain=party_order, range=colors),
                 legend=alt.Legend(title=None, orient="top", direction="horizontal", columns=4)
-            )
+            ),
+            order=alt.Order("__xorder__:N")  # English footnote: force line segment order to match the x-domain.
         )
 
+        # --- Pointerover selection + hit area ---
         sel = alt.selection_point(fields=["선거명_표시","계열"], nearest=True, on="pointerover", empty=False)
         HIT_SIZE = 650
         hit = base.mark_circle(size=HIT_SIZE, opacity=0).encode(
             x=x_shared,
             y="득표율:Q",
-            color=alt.Color("계열:N", scale=alt.Scale(domain=party_order, range=colors), legend=None)
+            color=alt.Color("계열:N", scale=alt.Scale(domain=party_order, range=colors), legend=None),
+            order=alt.Order("__xorder__:N")
         ).add_params(sel)
 
         pts = base.mark_circle(size=120).encode(
@@ -470,6 +497,7 @@ def render_vote_trend_chart(ts: pd.DataFrame, *, box_height_px: int = 420):
             y="득표율:Q",
             color=alt.Color("계열:N", scale=alt.Scale(domain=party_order, range=colors), legend=None),
             opacity=alt.condition(sel, alt.value(1), alt.value(0)),
+            order=alt.Order("__xorder__:N"),
             tooltip=[
                 alt.Tooltip("선거명_표시:N", title="선거명"),
                 alt.Tooltip("계열:N", title="계열"),
@@ -477,7 +505,7 @@ def render_vote_trend_chart(ts: pd.DataFrame, *, box_height_px: int = 420):
             ]
         ).transform_filter(sel)
 
-        # (REQ 4) Robust scroll/drag zoom on X
+        # --- Zoom/pan on X preserved ---
         zoomX = alt.selection_interval(bind='scales', encodings=['x'])
         chart = (lines + hit + pts).properties(height=box_height_px).add_params(zoomX).configure_view(stroke=None)
 
@@ -804,6 +832,7 @@ def render_region_detail_layout(
     
         with c3.container(height="stretch"):
             render_prg_party_box(df_prg, df_pop)
+
 
 
 
