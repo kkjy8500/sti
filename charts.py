@@ -518,7 +518,7 @@ def render_vote_trend_chart(ts: pd.DataFrame, *, box_height_px: int = 420):
 # (REQ 5) Unified card size + comfortable inner paddings.
 # =========================================================
 def render_results_2024_card(res_row_or_df: pd.DataFrame | None, df_24: pd.DataFrame | None = None, code: str | None = None):
-    with st.container(border=True):
+    with st.container(border=True, height="stretch"):
         st.markdown("**24년 총선결과**")
 
         if res_row_or_df is None or res_row_or_df.empty:
@@ -620,7 +620,7 @@ def render_results_2024_card(res_row_or_df: pd.DataFrame | None, df_24: pd.DataF
 # (REQ 5) Keep unified height and tidy paddings.
 # =========================================================
 def render_incumbent_card(cur_row: pd.DataFrame | None):
-    with st.container(border=True):
+    with st.container(border=True, height="stretch"):
         st.markdown("**현직정보**")
         if cur_row is None or cur_row.empty:
             st.info("현직 정보 데이터가 없습니다.")
@@ -679,7 +679,7 @@ def render_incumbent_card(cur_row: pd.DataFrame | None):
 # (REQ 5) Match height by splitting KPI (~140) + mini chart (~110).
 # =========================================================
 def render_prg_party_box(prg_row: pd.DataFrame|None=None, pop_row: pd.DataFrame|None=None, *, code: str|int|None=None, region: str|None=None, debug: bool=False):
-    with st.container(border=True):
+    with st.container(border=True, height="stretch"):
         st.markdown("**진보당 현황**")
         if prg_row is None or prg_row.empty:
             df_all = _load_index_df()
@@ -803,15 +803,15 @@ def render_region_detail_layout(
         col1, col2, col3 = st.columns([1.0, 1.35, 2.85], gap="small")
     
         with col1.container(border=True, height="stretch"):
-            render_population_box(df_pop, box_height_px=240)
+            render_population_box(df_pop)
     
         with col2.container(border=True, height="stretch"):
             st.markdown("**연령 구성**")
-            render_age_highlight_chart(df_pop, box_height_px=240)
+            render_age_highlight_chart(df_pop)
     
         with col3.container(border=True, height="stretch"):
             st.markdown("**연령별, 성별 인구분포**")
-            render_sex_ratio_bar(df_pop, box_height_px=340)
+            render_sex_ratio_bar(df_pop)
 
     st.markdown("### 📈 정당성향별 득표추이")
     render_vote_trend_chart(df_trend, box_height_px=420)
@@ -825,6 +825,7 @@ def render_region_detail_layout(
             render_incumbent_card(df_cur)
         with c3:
             render_prg_party_box(df_prg, df_pop)
+
 
 
 
