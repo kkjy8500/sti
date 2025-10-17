@@ -266,7 +266,7 @@ def render_age_highlight_chart(pop_df: pd.DataFrame, *, box_height_px: int = 240
 
     # change the height px to change the space between buttons and donut chart
     # HACK: Use markdown to add vertical space (e.g., 10px) between the radio buttons and the chart.
-    st.markdown("<div style='height: 25px;'></div>", unsafe_allow_html=True)  
+    st.markdown("<div style='height: 35px;'></div>", unsafe_allow_html=True)  
 
     # Donut base
     inner_r, outer_r = 68, 106
@@ -290,7 +290,6 @@ def render_age_highlight_chart(pop_df: pd.DataFrame, *, box_height_px: int = 240
                      alt.Tooltip("표시비율:Q", title="비율(%)", format=".1f")],
         )
         .properties(width=W, height=H)
-        # .configure_view(stroke=None)  # <-- ❌ remove here: config on subchart causes TypeError in vconcat
     )
 
     # Robust caption inside the chart area using a tiny vconcat text panel
@@ -302,7 +301,7 @@ def render_age_highlight_chart(pop_df: pd.DataFrame, *, box_height_px: int = 240
     pct_txt = f"{(ratios100[idx]):.1f}%"
     num_font_px = 28
     lbl_font_px = 14
-    panel_h = 35
+    panel_h = 20
 
     txt_df = pd.DataFrame({"x":[0.5], "y":[0.5], "num":[pct_txt], "lbl":[label_map.get(focus, focus)]})
 
@@ -317,7 +316,7 @@ def render_age_highlight_chart(pop_df: pd.DataFrame, *, box_height_px: int = 240
     )
     lbl = (
         alt.Chart(txt_df)
-        .mark_text(fontSize=lbl_font_px, color="#475569", dy=23)
+        .mark_text(fontSize=lbl_font_px, color="#475569", dy=30)
         .encode(
             x=alt.X("x:Q", scale=alt.Scale(domain=[0,1]), axis=None),
             y=alt.Y("y:Q", scale=alt.Scale(domain=[0,1]), axis=None),
@@ -342,7 +341,7 @@ def render_age_highlight_chart(pop_df: pd.DataFrame, *, box_height_px: int = 240
 #  - To adjust visual density, tweak bar_size and box_height_px.
 #  - To widen the x-range headroom, increase domain max (e.g., 0.30 → 0.35).
 # =========================================================
-def render_sex_ratio_bar(pop_df: pd.DataFrame, *, box_height_px: int = 340):
+def render_sex_ratio_bar(pop_df: pd.DataFrame, *, box_height_px: int = 360):
     if pop_df is None or pop_df.empty:
         st.info("성비 데이터를 표시할 수 없습니다. (population.csv 없음)")
         return
@@ -392,7 +391,7 @@ def render_sex_ratio_bar(pop_df: pd.DataFrame, *, box_height_px: int = 340):
             x=alt.X(
                 "전체비중:Q",
                 scale=alt.Scale(domain=[0, 0.30]),
-                axis=alt.Axis(format=".0%", title="전체 기준 구성비(%)", grid=True)
+                axis=alt.Axis(format=".0%", title="전체 기준 구성비(%)", grid=True, titlePadding=30)
             ),
             color=alt.Color(
                 "성별:N",
@@ -471,7 +470,7 @@ def render_vote_trend_chart(ts: pd.DataFrame, *, box_height_px: int = 420):
             "선거명_표시:N",
             sort=None,
             scale=alt.Scale(domain=order),
-            axis=alt.Axis(labelAngle=-32, labelOverlap=False, labelPadding=6, labelLimit=280, title="선거명")
+            axis=alt.Axis(labelAngle=-32, labelOverlap=False, labelPadding=12, labelLimit=280, title="선거명")
         )
 
         base = alt.Chart(long_df)
@@ -514,7 +513,7 @@ def render_vote_trend_chart(ts: pd.DataFrame, *, box_height_px: int = 420):
 # =========================================================
 # [2024 Results Card]
 # HOW TO CHANGE LATER:
-#  - To keep equal card heights, keep html_component height=260.
+#  - To keep equal card heights, keep html_component height=250.
 #  - Inner paddings are only inline CSS below.
 # (REQ 5) Unified card size + comfortable inner paddings.
 # =========================================================
@@ -596,7 +595,7 @@ def render_results_2024_card(res_row_or_df: pd.DataFrame | None, df_24: pd.DataF
         gap_txt = f"{gap:.1f} %p" if isinstance(gap,(int,float)) else "N/A"
 
         html = f"""
-        <div style="display:grid; grid-template-columns: 1fr 1fr; align-items:center; gap:0; padding:6px 8px 2px 8px;">
+        <div style="display:grid; grid-template-columns: 1fr 1fr; align-items:center; gap:0; padding:6px 8px 6px 8px;">
           <div style="text-align:center; padding:8px 6px;">
             <div style="display:inline-flex; padding:6px 10px; border-radius:14px; font-weight:600; color:{c1_fg}; background:{c1_bg};">{p1}</div>
             <div style="font-weight:700; margin-top:6px; color:{COLOR_TEXT_DARK};">{_fmt_pct(share1)}</div>
@@ -614,7 +613,7 @@ def render_results_2024_card(res_row_or_df: pd.DataFrame | None, df_24: pd.DataF
         </div>
         """
         from streamlit.components.v1 import html as html_component
-        html_component(html, height=260, scrolling=False)
+        html_component(html, height=250, scrolling=False)
 
 # =========================================================
 # [Incumbent Card]
@@ -673,7 +672,7 @@ def render_incumbent_card(cur_row: pd.DataFrame | None):
         </div>
         """
         from streamlit.components.v1 import html as html_component
-        html_component(html, height=260, scrolling=False)
+        html_component(html, height=250, scrolling=False)
 
 # =========================================================
 # [Progressive Party Box]
@@ -720,17 +719,17 @@ def render_prg_party_box(prg_row: pd.DataFrame|None=None, pop_row: pd.DataFrame|
         html = f"""
         <div style="display:grid; grid-template-columns: 1fr 1fr; align-items:center; gap:12px; margin-top:2px; margin-bottom:0; padding:0 8px;">
             <div style="text-align:center; padding:8px 6px;">
-                <div style="color:#6B7280; font-weight:600; margin-bottom:3px;">진보 득표력</div>
+                <div style="color:#6B7280; font-weight:600; margin-bottom:2px;">진보 득표력</div>
                 <div style="font-weight:800; color:#111827;">{_fmt_pct(strength) if strength is not None else 'N/A'}</div>
             </div>
             <div style="text-align:center; padding:8px 6px;">
-                <div style="color:#6B7280; font-weight:600; margin-bottom:3px;">진보당 당원수</div>
+                <div style="color:#6B7280; font-weight:600; margin-bottom:2px;">진보당 당원수</div>
                 <div style="font-weight:800; color:#111827;">{(f"{members:,}명" if isinstance(members,int) else "N/A")}</div>
             </div>
         </div>
         """
         from streamlit.components.v1 import html as html_component
-        html_component(html, height=120, scrolling=False)
+        html_component(html, height=100, scrolling=False)
 
         # --- Mini two-bar (Region vs 10-avg) ---
         try:
@@ -826,6 +825,7 @@ def render_region_detail_layout(
         render_incumbent_card(df_cur)
     with c3:
         render_prg_party_box(df_prg, df_pop)
+
 
 
 
