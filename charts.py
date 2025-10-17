@@ -200,7 +200,7 @@ def render_population_box(pop_df: pd.DataFrame, *, box_height_px: int = 180):
             """, unsafe_allow_html=True
         )
 
-    # ---------- Bars ----------
+    # ---------- Bars (Altair v5-safe: share the same base encoding) ----------
     bar_h = 110
     if avg_total is not None:
         bar_df = pd.DataFrame({"항목": ["해당 지역", "10개 평균"], "값": [region_total, avg_total]})
@@ -210,24 +210,29 @@ def render_population_box(pop_df: pd.DataFrame, *, box_height_px: int = 180):
         bar_df.loc[0, "값"] = 1.0  # English footnote: avoid zero-width bar.
     bar_df["색상"] = bar_df["항목"].map(lambda x: COLOR_BLUE if x == "해당 지역" else "#9CA3AF")
 
-    # English footnote:
-    # - axis title removed to hide "값".
-    # - y-axis hidden; use bar size & band for visibility with single category.
-    # - add value labels (mark_text) to ensure something visible even in tight space.
-    bars = alt.Chart(bar_df).mark_bar(size=34).encode(
+    # English footnote: keep encodings on a shared base to avoid subtype/type mismatches in layering.
+    base = alt.Chart(bar_df).encode(
         x=alt.X(
             "값:Q",
             axis=alt.Axis(format="~,", title=None, labelOverlap=False),
-            scale=alt.Scale(domain=[0, max(bar_df["값"].max(), 1)*1.1], nice=False)
+            scale=alt.Scale(domain=[0, max(bar_df["값"].max(), 1) * 1.1], nice=False)
         ),
-        y=alt.Y("항목:N", axis=None, sort=["해당 지역", "10개 평균"], scale=alt.Scale(band=0.8)),
-        color=alt.Color("색상:N", scale=None, legend=None),
-        tooltip=[alt.Tooltip("항목:N"), alt.Tooltip("값:Q", format="~,")]
+        y=alt.Y(
+            "항목:N",
+            axis=None,
+            sort=["해당 지역", "10개 평균"],
+            scale=alt.Scale(band=0.8)  # English footnote: helps visibility with a single category.
+        )
     ).properties(height=bar_h, padding={"top": 0, "bottom": 0, "left": 0, "right": 0})
 
-    labels = alt.Chart(bar_df).mark_text(align="left", dx=6, fontWeight="600").encode(
-        x=alt.X("값:Q"),
-        y=alt.Y("항목:N", sort=["해당 지역", "10개 평균"], axis=None),
+    # Bars
+    bars = base.mark_bar(size=34).encode(
+        color=alt.Color("색상:N", scale=None, legend=None),
+        tooltip=[alt.Tooltip("항목:N"), alt.Tooltip("값:Q", format="~,")]
+    )
+
+    # Inline value labels
+    labels = base.mark_text(align="left", dx=6, fontWeight="600").encode(
         text=alt.Text("값:Q", format="~,")
     )
 
@@ -835,6 +840,7 @@ def render_region_detail_layout(
     
         with c3.container(height="stretch"):
             render_prg_party_box(df_prg, df_pop)
+
 
 
 
