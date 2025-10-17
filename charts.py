@@ -131,7 +131,7 @@ def _party_chip_color(name: str) -> tuple[str, str]:
 #  - To adjust bar height, tweak bar_h (e.g., 150~190).
 # (REQ 1) Two bars: blue = region, gray = 10-avg.
 # =========================================================
-def render_population_box(pop_df: pd.DataFrame, *, box_height_px: int = 240):
+def render_population_box(pop_df: pd.DataFrame, *, box_height_px: int = 180):
     if pop_df is None or pop_df.empty:
         st.info("유동인구/연령/성비 차트를 위한 데이터가 없습니다.")
         return
@@ -235,7 +235,7 @@ def render_population_box(pop_df: pd.DataFrame, *, box_height_px: int = 240):
 # (REQ 2) Place emphasis number+label INSIDE the same chart (just below donut),
 #         not below the container; implemented as layered text.
 # =========================================================
-def render_age_highlight_chart(pop_df: pd.DataFrame, *, box_height_px: int = 240):
+def render_age_highlight_chart(pop_df: pd.DataFrame, *, box_height_px: int = 180):
     df = _norm_cols(pop_df.copy()) if pop_df is not None else pd.DataFrame()
     if df.empty:
         st.info("연령 구성 데이터가 없습니다."); return
@@ -341,7 +341,7 @@ def render_age_highlight_chart(pop_df: pd.DataFrame, *, box_height_px: int = 240
 #  - To adjust visual density, tweak bar_size and box_height_px.
 #  - To widen the x-range headroom, increase domain max (e.g., 0.30 → 0.35).
 # =========================================================
-def render_sex_ratio_bar(pop_df: pd.DataFrame, *, box_height_px: int = 360):
+def render_sex_ratio_bar(pop_df: pd.DataFrame, *, box_height_px: int = 180):
     if pop_df is None or pop_df.empty:
         st.info("성비 데이터를 표시할 수 없습니다. (population.csv 없음)")
         return
@@ -595,7 +595,7 @@ def render_results_2024_card(res_row_or_df: pd.DataFrame | None, df_24: pd.DataF
         gap_txt = f"{gap:.1f} %p" if isinstance(gap,(int,float)) else "N/A"
 
         html = f"""
-        <div style="display:grid; grid-template-columns: 1fr 1fr; align-items:center; gap:0; padding:6px 8px 6px 8px;">
+        <div style="display:grid; grid-template-columns: 1fr 1fr; align-items:center; gap:0; padding:6px 8px 2px 8px;">
           <div style="text-align:center; padding:8px 6px;">
             <div style="display:inline-flex; padding:6px 10px; border-radius:14px; font-weight:600; color:{c1_fg}; background:{c1_bg};">{p1}</div>
             <div style="font-weight:700; margin-top:6px; color:{COLOR_TEXT_DARK};">{_fmt_pct(share1)}</div>
@@ -729,7 +729,7 @@ def render_prg_party_box(prg_row: pd.DataFrame|None=None, pop_row: pd.DataFrame|
         </div>
         """
         from streamlit.components.v1 import html as html_component
-        html_component(html, height=100, scrolling=False)
+        html_component(html, height=240, scrolling=False)
 
         # --- Mini two-bar (Region vs 10-avg) ---
         try:
@@ -825,6 +825,7 @@ def render_region_detail_layout(
         render_incumbent_card(df_cur)
     with c3:
         render_prg_party_box(df_prg, df_pop)
+
 
 
 
