@@ -200,13 +200,16 @@ def render_population_box(pop_df: pd.DataFrame, *, box_height_px: int = 240):
     use_two_bars = True
     bar_h = 110  # keep same feel as Progressive mini chart; raise/lower if needed
     if use_two_bars:
-        if isinstance(avg_total,(int,float)) and avg_total and avg_total>0:
+        if isinstance(avg_total, (int, float)) and avg_total and avg_total > 0:
             bar_df = pd.DataFrame({"항목": ["해당 지역", "10개 평균"], "값": [float(region_total), float(avg_total)]})
             x_max = max(float(region_total), float(avg_total)) * 1.1
         else:
             bar_df = pd.DataFrame({"항목": ["해당 지역"], "값": [float(region_total)]})
             x_max = float(region_total) * 1.1 if region_total > 0 else 1.0
-
+    
+        # ✅ Minimal, vega-safe: avoid alt.datum.<한글필드>; use FieldEqualPredicate
+        is_region = alt.FieldEqualPredicate(field="항목", equal="해당 지역")
+    
         chart = (
             alt.Chart(bar_df)
             .mark_bar()
@@ -218,17 +221,19 @@ def render_population_box(pop_df: pd.DataFrame, *, box_height_px: int = 240):
                 ),
                 y=alt.Y("항목:N", title=None),
                 color=alt.condition(
-                    alt.datum.항목 == "해당 지역",
-                    alt.value(COLOR_BLUE),        # same blue as Progressive box
-                    alt.value("#9CA3AF")          # gray for 10-avg
+                    is_region,
+                    alt.value(COLOR_BLUE),   # same blue as Progressive box
+                    alt.value("#9CA3AF")     # gray for 10-avg
                 ),
                 tooltip=[
                     alt.Tooltip("항목:N", title="구분"),
                     alt.Tooltip("값:Q", title="유권자수", format=",.0f")
                 ]
             )
-        ).properties(height=bar_h, padding={"top":0, "bottom":0, "left":0, "right":0}).configure_view(stroke=None)
-
+            .properties(height=bar_h, padding={"top": 0, "bottom": 0, "left": 0, "right": 0})
+            .configure_view(stroke=None)
+        )
+    
         st.altair_chart(chart, use_container_width=True, theme=None)
 
 # =========================================================
@@ -843,6 +848,7 @@ def render_region_detail_layout(
         render_incumbent_card(df_cur)
     with c3:
         render_prg_party_box(df_prg, df_pop)
+
 
 
 
