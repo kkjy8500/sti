@@ -415,12 +415,11 @@ def render_vote_trend_chart(ts: pd.DataFrame, *, box_height_px: int = 420):
         else:
             if not (label_col and value_col): st.warning("정당 성향(계열)과 득표율 컬럼이 필요합니다."); return
             long_df = df.rename(columns={label_col:"계열", value_col:"득표율"}).copy()
-            if id_col:       base_e = long_df[id_col].astype(str)
+            if id_col:     base_e = long_df[id_col].astype(str)
             elif year_col: base_e = long_df[year_col].astype(str)
             else: st.warning("선거명을 식별할 컬럼이 필요합니다."); return
 
         # --- Normalize 득표율 to numeric in 0–100 scale (keep human-readable) ---
-        # English footnote: strip '%' and coerce; do NOT divide by 100 so axis stays 0–100.
         long_df["득표율"] = pd.to_numeric(
             long_df["득표율"].astype(str).str.replace("%","", regex=False).str.strip(),
             errors="coerce"
@@ -446,19 +445,15 @@ def render_vote_trend_chart(ts: pd.DataFrame, *, box_height_px: int = 420):
 
         # --- Global x-axis order ---
         ORDER_LABELS = [
-            "2016 총선 비례",
-            "2017 대선",
-            "2018 광역단체장",
-            "2018 광역 비례",
+            "2016 총선 비례","2017 대선",
+            "2018 광역단체장","2018 광역 비례",
             "2020 총선 비례",
-            "2022 대선",
-            "2022 광역단체장",
-            "2022 광역 비례",
+            "2022 대선","2022 광역단체장","2022 광역 비례",
             "2024 총선 비례",
             "2025 대선",
         ]
 
-        # --- Enforce categorical order and line grouping ---
+        # --- Enforce categorical order and data sort (no 'order' channel) ---
         long_df = long_df[long_df["선거명_표시"].isin(ORDER_LABELS)].copy()
         long_df["__xorder__"] = pd.Categorical(long_df["선거명_표시"], categories=ORDER_LABELS, ordered=True)
         long_df = long_df.sort_values(["계열","__xorder__"]).reset_index(drop=True)
@@ -470,41 +465,40 @@ def render_vote_trend_chart(ts: pd.DataFrame, *, box_height_px: int = 420):
         x_shared = alt.X(
             "선거명_표시:N",
             sort=None,
-            scale=alt.Scale(domain=ORDER_LABELS),
+            scale=alt.Scale(domain=ORDER_LABELS),  # English footnote: fixed domain guarantees x order globally.
             axis=alt.Axis(labelAngle=-32, labelOverlap=False, labelPadding=20, labelLimit=280, title="선거명")
         )
 
         base = alt.Chart(long_df)
 
-        # ----------------- lines 차트 -----------------
+        # English footnote: use detail='계열' so each party draws independently; rely on x-domain order.
         lines = base.mark_line(point=False, strokeWidth=2).encode(
             x=x_shared,
             y=alt.Y("득표율:Q", axis=alt.Axis(title="득표율(%)")),
-            color=alt.Color("계열:N", scale=alt.Scale(domain=party_order, range=colors),
-                                     legend=alt.Legend(title=None, orient="top", direction="horizontal", columns=4)),
-            detail="계열:N",
-            order=alt.Order("__xorder__:O") # ✅ :O 타입을 다시 명시
+            color=alt.Color("계열:N",
+                            scale=alt.Scale(domain=party_order, range=colors),
+                            legend=alt.Legend(title=None, orient="top", direction="horizontal", columns=4)),
+            detail="계열:N"
         )
-        
-        # ----------------- hit 차트 -----------------
+
         sel = alt.selection_point(fields=["선거명_표시","계열"], nearest=True, on="pointerover", empty=False)
+
         hit = base.mark_circle(size=650, opacity=0).encode(
             x=x_shared, y="득표율:Q",
             color=alt.Color("계열:N", scale=alt.Scale(domain=party_order, range=colors), legend=None),
-            detail="계열:N", order=alt.Order("__xorder__:O") # ✅ :O 타입을 다시 명시
+            detail="계열:N"
         ).add_params(sel)
-        
-        # ----------------- pts 차트 -----------------
+
         pts = base.mark_circle(size=120).encode(
             x=x_shared, y="득표율:Q",
             color=alt.Color("계열:N", scale=alt.Scale(domain=party_order, range=colors), legend=None),
             opacity=alt.condition(sel, alt.value(1), alt.value(0)),
-            detail="계열:N", order=alt.Order("__xorder__:O"), # ✅ :O 타입을 다시 명시
+            detail="계열:N",
             tooltip=[alt.Tooltip("선거명_표시:N", title="선거명"),
                      alt.Tooltip("계열:N", title="계열"),
                      alt.Tooltip("득표율:Q", title="득표율(%)", format=".1f")]
         ).transform_filter(sel)
-        
+
         zoomX = alt.selection_interval(bind='scales', encodings=['x'])
         chart = (lines + hit + pts).properties(height=box_height_px).add_params(zoomX).configure_view(stroke=None)
         st.altair_chart(chart, use_container_width=True, theme=None)
@@ -830,6 +824,7 @@ def render_region_detail_layout(
     
         with c3.container(height="stretch"):
             render_prg_party_box(df_prg, df_pop)
+
 
 
 
