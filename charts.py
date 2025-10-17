@@ -496,16 +496,8 @@ def render_vote_trend_chart(ts: pd.DataFrame, *, box_height_px: int = 420):
             ]
         ).transform_filter(sel) 
 
-        zoomX = alt.selection_interval(
-            bind='scales',
-            encodings=['x'],
-            zoom=True,        # ← wheel zoom enabled (boolean)
-            translate=True    # ← drag pan enabled (boolean)
-        )
-
         chart = (
             (lines + hit + pts)
-            .add_params(zoomX)
             .properties(height=box_height_px)
             .configure_view(stroke=None)
             .configure(tooltip={"content": "encoding"})  # keep tooltips to only encoded fields
@@ -823,6 +815,7 @@ def render_region_detail_layout(
         render_incumbent_card(df_cur)
     with c3:
         render_prg_party_box(df_prg, df_pop)
+
 
 
 
