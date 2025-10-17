@@ -282,29 +282,49 @@ def render_age_highlight_chart(pop_df: pd.DataFrame, *, box_height_px: int = 240
         .configure_view(stroke=None)
     )
 
-    # Emphasis number + label as layered texts (inside same chart canvas)
+    # - We use a separate 0~1 normalized coord system to avoid pixel math & clipping.
+    # - Edit num_font_px/lbl_font_px to resize; edit panel_h to move them closer/farther.
     label_map = {Y: "청년층(18~39세)", M: "중년층(40~59세)", O: "고령층(65세 이상)"}
     idx = labels_order.index(focus)
-    pct_txt = f"{ratios100[idx]:.1f}%"
+    pct_txt = f"{(ratios100[idx]):.1f}%"
+    num_font_px = 28  # ↑ number size
+    lbl_font_px = 14  # ↑ label size
+    panel_h = 46      # ↑/↓ to change spacing under the donut
 
-    num_font_px = 28   # bigger number
-    lbl_font_px = 14   # label size
-    # Position just below the donut: center X, Y near bottom of arcs
-    text_y_num = int(H * 0.5 + outer_r + 6)
-    text_y_lbl = text_y_num + 18
+    txt_df = pd.DataFrame({
+        "x":[0.5], "y":[0.5],
+        "num":[pct_txt],
+        "lbl":[label_map.get(focus, focus)]
+    })
 
-    num_layer = (
-        alt.Chart(pd.DataFrame({"t":[pct_txt]}))
-        .mark_text(fontWeight="bold", fontSize=num_font_px)
-        .encode(text="t:N", x=alt.value(W/2), y=alt.value(text_y_num), color=alt.value("#0f172a"))
+    num = (
+        alt.Chart(txt_df)
+        .mark_text(fontWeight="bold", fontSize=num_font_px, color="#0f172a")
+        .encode(
+            x=alt.X("x:Q", scale=alt.Scale(domain=[0,1]), axis=None),
+            y=alt.Y("y:Q", scale=alt.Scale(domain=[0,1]), axis=None),
+            text="num:N"
+        )
     )
-    lbl_layer = (
-        alt.Chart(pd.DataFrame({"t":[label_map.get(focus, focus)]}))
-        .mark_text(fontSize=lbl_font_px)
-        .encode(text="t:N", x=alt.value(W/2), y=alt.value(text_y_lbl), color=alt.value("#475569"))
+    lbl = (
+        alt.Chart(txt_df)
+        .mark_text(fontSize=lbl_font_px, color="#475569", dy=18)
+        .encode(
+            x=alt.X("x:Q", scale=alt.Scale(domain=[0,1]), axis=None),
+            y=alt.Y("y:Q", scale=alt.Scale(domain=[0,1]), axis=None),
+            text="lbl:N"
+        )
     )
 
-    st.altair_chart(base + num_layer + lbl_layer, use_container_width=True, theme=None)
+    text_panel = (num + lbl).properties(height=panel_h)
+
+    # vconcat keeps both inside one Altair figure (so it feels “inside the canvas”)
+    chart_all = alt.vconcat(
+        base,
+        text_panel
+    ).resolve_scale(x="independent", y="independent").properties(spacing=0)
+
+    st.altair_chart(chart_all, use_container_width=True, theme=None)
 
 # =========================================================
 # [Sex Composition by Age: Horizontal Bars]
@@ -775,3 +795,4 @@ def render_region_detail_layout(
         render_incumbent_card(df_cur)
     with c3:
         render_prg_party_box(df_prg, df_pop)
+
