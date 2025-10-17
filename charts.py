@@ -493,7 +493,7 @@ def render_vote_trend_chart(ts: pd.DataFrame, *, box_height_px: int = 420):
                 alt.Tooltip("계열:N", title="계열"),
                 alt.Tooltip("득표율:Q", title="득표율(%)", format=".1f")
             ]
-        ).transform_filter(sel).transform_drop(["계열_sort_index"])
+        ).transform_filter(sel)
 
         st.altair_chart(chart, use_container_width=True, theme=None)
 
@@ -807,6 +807,7 @@ def render_region_detail_layout(
         render_incumbent_card(df_cur)
     with c3:
         render_prg_party_box(df_prg, df_pop)
+
 
 
 
