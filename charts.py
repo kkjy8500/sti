@@ -298,38 +298,33 @@ def render_age_highlight_chart(pop_df: pd.DataFrame, *, box_height_px: int = 180
 
     NUM_FONT, LBL_FONT = 28, 14
     # English footnote: Move these up/down to control the donut-to-text spacing without changing chart layout.
-    TXT_NUM_Y = outer_r + 30   # pixels from top
+    TXT_NUM_Y = outer_r + 30
     TXT_LBL_Y = outer_r + 54
 
+    # Altair charts are immutable; use encode(x=alt.value(...), y=alt.value(...)).
     num_text = (
-        alt.Chart(pd.DataFrame({"t":[pct_txt]}))
+        alt.Chart(pd.DataFrame({"t": [pct_txt]}), width=W, height=H)
         .mark_text(fontWeight="bold", fontSize=NUM_FONT, color="#0f172a")
-        .encode(text="t:N")
-        .properties(width=W, height=H)
-        .encode()  # no-op; keeps the API symmetric
-        .transform_calculate(dummy="0")  # English footnote: no data dependency; pure overlay.
-        .mark_text(fontWeight="bold", fontSize=NUM_FONT, color="#0f172a")
-        .encode(text="t:N")
-        .properties(width=W, height=H)
-        .configure_view(stroke=None)
-    ).encode()
-
-    # set absolute positions
-    num_text.encoding.x = alt.Value(W/2)
-    num_text.encoding.y = alt.Value(TXT_NUM_Y)
-
-    lbl_text = (
-        alt.Chart(pd.DataFrame({"t":[label_map.get(focus, focus)]}))
-        .mark_text(fontSize=LBL_FONT, color="#475569")
-        .encode(text="t:N")
-        .properties(width=W, height=H)
+        .encode(
+            text="t:N",
+            x=alt.value(W/2),
+            y=alt.value(TXT_NUM_Y),
+        )
         .configure_view(stroke=None)
     )
-    lbl_text.encoding.x = alt.Value(W/2)
-    lbl_text.encoding.y = alt.Value(TXT_LBL_Y)
+
+    lbl_text = (
+        alt.Chart(pd.DataFrame({"t": [label_map.get(focus, focus)]}), width=W, height=H)
+        .mark_text(fontSize=LBL_FONT, color="#475569")
+        .encode(
+            text="t:N",
+            x=alt.value(W/2),
+            y=alt.value(TXT_LBL_Y),
+        )
+        .configure_view(stroke=None)
+    )
 
     chart_all = (base + num_text + lbl_text).configure_view(stroke=None)
-
     st.altair_chart(chart_all, use_container_width=True, theme=None)
     
 # =========================================================
@@ -854,6 +849,7 @@ def render_region_detail_layout(
     
         with c3.container(height="stretch"):
             render_prg_party_box(df_prg, df_pop)
+
 
 
 
