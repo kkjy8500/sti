@@ -496,13 +496,13 @@ def render_vote_trend_chart(ts: pd.DataFrame, *, box_height_px: int = 420):
         ).transform_filter(sel).transform_drop(["계열_sort_index"])
 
         # (REQ 4) Robust scroll/drag zoom on X
-            zoomX = alt.selection_interval(
-                bind='scales',
-                encodings=['x'],
-                zoom='wheel!',                                # ← enable wheel zoom
-                translate='[mousedown, window:mouseup] > window:mousemove!'  # ← drag pan
-            )
-            chart = (lines + hit + pts).add_params(zoomX).properties(height=box_height_px).configure_view(stroke=None)
+        zoomX = alt.selection_interval(
+            bind='scales',
+            encodings=['x'],
+            zoom='wheel!',                                # enable wheel zoom
+            translate='[mousedown, window:mouseup] > window:mousemove!'  # drag pan
+        )
+        chart = (lines + hit + pts).add_params(zoomX).properties(height=box_height_px).configure_view(stroke=None)
 
         st.altair_chart(chart, use_container_width=True, theme=None)
 
@@ -813,6 +813,7 @@ def render_region_detail_layout(
         render_incumbent_card(df_cur)
     with c3:
         render_prg_party_box(df_prg, df_pop)
+
 
 
 
