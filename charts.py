@@ -472,8 +472,7 @@ def render_vote_trend_chart(ts: pd.DataFrame, *, box_height_px: int = 420):
                 "계열:N",
                 scale=alt.Scale(domain=party_order, range=colors),
                 legend=alt.Legend(title=None, orient="top", direction="horizontal", columns=4)
-            ),
-            tooltip=None 
+            )
         )
 
         sel = alt.selection_point(fields=["선거명_표시","계열"], nearest=True, on="pointerover", empty=False)
@@ -482,8 +481,7 @@ def render_vote_trend_chart(ts: pd.DataFrame, *, box_height_px: int = 420):
         hit = base.mark_circle(size=HIT_SIZE, opacity=0).encode(
             x=x_shared,
             y="득표율:Q",
-            color=alt.Color("계열:N", scale=alt.Scale(domain=party_order, range=colors), legend=None),
-            tooltip=None
+            color=alt.Color("계열:N", scale=alt.Scale(domain=party_order, range=colors), legend=None)
         ).add_params(sel)
 
         pts = base.mark_circle(size=120).encode(
@@ -825,6 +823,7 @@ def render_region_detail_layout(
         render_incumbent_card(df_cur)
     with c3:
         render_prg_party_box(df_prg, df_pop)
+
 
 
 
