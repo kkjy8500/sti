@@ -266,7 +266,7 @@ def render_age_highlight_chart(pop_df: pd.DataFrame, *, box_height_px: int = 180
         "강조": [l == focus for l in labels_order], "순서": [1, 2, 3, 4],
     })
     W = 320
-    H = max(150, int(box_height_px))  # a bit taller to host texts under donut
+    H = max(180, int(box_height_px))  # a bit taller to host texts under donut
 
     # Donut base (⚠️ NOTE: do NOT call .configure_* here; apply it AFTER vconcat)
     base = (
@@ -290,7 +290,7 @@ def render_age_highlight_chart(pop_df: pd.DataFrame, *, box_height_px: int = 180
     pct_txt = f"{(ratios100[idx]):.1f}%"
     num_font_px = 28
     lbl_font_px = 14
-    panel_h = 0  # ✅ reduce gap between donut and text
+    panel_h = -20  # ✅ reduce gap between donut and text
     
     txt_df = pd.DataFrame({"x":[0.5], "y":[0.5], "num":[pct_txt], "lbl":[label_map.get(focus, focus)]})
     
@@ -314,7 +314,7 @@ def render_age_highlight_chart(pop_df: pd.DataFrame, *, box_height_px: int = 180
 #  - To adjust visual density, tweak bar_size and box_height_px.
 #  - To widen the x-range headroom, increase domain max (e.g., 0.30 → 0.35).
 # =========================================================
-def render_sex_ratio_bar(pop_df: pd.DataFrame, *, box_height_px: int = 180):
+def render_sex_ratio_bar(pop_df: pd.DataFrame, *, box_height_px: int = 340):
     if pop_df is None or pop_df.empty:
         st.info("성비 데이터를 표시할 수 없습니다. (population.csv 없음)")
         return
@@ -355,19 +355,22 @@ def render_sex_ratio_bar(pop_df: pd.DataFrame, *, box_height_px: int = 180):
     male_color = "#1E40AF"
     female_color = "#60A5FA"
 
-    # bar_size controls inter-bar spacing; height controls total chart space.
     bar_size = 30
     bars = (
         alt.Chart(tidy)
         .mark_bar(size=bar_size)
         .encode(
             y=alt.Y("연령대표시:N", sort=[label_map[a] for a in age_buckets], title=None),
-            x=alt.X("전체비중:Q",
-                    scale=alt.Scale(domain=[0, 0.35]),  # ✅ slightly wider range
-                    axis=alt.Axis(format=".0%", title="전체 기준 구성비(%)", grid=True, titlePadding=30)),
-            color=alt.Color("성별:N",
-                            scale=alt.Scale(domain=["남성","여성"], range=[male_color, female_color]),
-                            legend=alt.Legend(title=None, orient="top")),
+            x=alt.X(
+                "전체비중:Q",
+                scale=alt.Scale(domain=[0, 0.30]),
+                axis=alt.Axis(format=".0%", title="전체 기준 구성비(%)", grid=True)
+            ),
+            color=alt.Color(
+                "성별:N",
+                scale=alt.Scale(domain=["남성","여성"], range=[male_color, female_color]),
+                legend=alt.Legend(title=None, orient="top")
+            ),
             tooltip=[
                 alt.Tooltip("연령대표시:N", title="연령대"),
                 alt.Tooltip("성별:N", title="성별"),
@@ -376,7 +379,7 @@ def render_sex_ratio_bar(pop_df: pd.DataFrame, *, box_height_px: int = 180):
                 alt.Tooltip("연령대내비중:Q", title="연령대 내부 비중", format=".1%"),
             ],
         )
-        .properties(height=180)  # ✅ taller chart
+        .properties(height=box_height_px)
         .configure_view(stroke=None)
     )
     st.altair_chart(bars, use_container_width=True, theme=None)
@@ -742,7 +745,7 @@ def render_prg_party_box(prg_row: pd.DataFrame|None=None, pop_row: pd.DataFrame|
                         ),
                         y=alt.Y("항목:N", title=None, sort=["해당 지역", "10개 평균"]),
                         color=alt.Color("색상:N", scale=None, legend=None),
-                        tooltip=[alt.Tooltip("항목:N"), alt.Tooltip("값:Q", format=".1%")]
+                        tooltip=[alt.Tooltip("항목:N"), alt.Tooltip("값:Q", format=".2%")]
                     )
                     .properties(height=110, padding={"top":0,"bottom":0,"left":0,"right":0})
                     .configure_view(stroke=None)
@@ -801,6 +804,7 @@ def render_region_detail_layout(
     
         with c3.container(height="stretch"):
             render_prg_party_box(df_prg, df_pop)
+
 
 
 
