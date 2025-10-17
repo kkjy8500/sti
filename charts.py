@@ -761,6 +761,9 @@ def render_prg_party_box(prg_row: pd.DataFrame|None=None, pop_row: pd.DataFrame|
                     )
                 ).properties(height=110, padding={"top":0, "bottom":0, "left":0, "right":0}).configure_view(stroke=None)
                 st.altair_chart(mini, use_container_width=True, theme=None)
+        except Exception:
+            pass
+
 
 # =========================================================
 # [Region Detail Layout]
@@ -804,6 +807,7 @@ def render_region_detail_layout(
         render_incumbent_card(df_cur)
     with c3:
         render_prg_party_box(df_prg, df_pop)
+
 
 
 
