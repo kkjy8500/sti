@@ -465,6 +465,8 @@ def render_vote_trend_chart(ts: pd.DataFrame, *, box_height_px: int = 420):
         )
 
         base = alt.Chart(long_df)
+
+        # --- Lines (legend at top) ---
         lines = base.mark_line(point=False, strokeWidth=2).encode(
             x=x_shared,
             y=alt.Y("득표율:Q", axis=alt.Axis(title="득표율(%)")),
@@ -475,9 +477,12 @@ def render_vote_trend_chart(ts: pd.DataFrame, *, box_height_px: int = 420):
             )
         )
 
-        sel = alt.selection_point(fields=["선거명_표시","계열"], nearest=True, on="pointerover", empty=False)
-        HIT_SIZE = 650
-        
+        # --- Pointer-over selection (Altair v5-safe) ---
+        # NOTE [EN]: In v5, `empty` must be "none"|"all" (booleans are invalid), and `nearest` can be omitted
+        #            because we use a large transparent hitbox for nearest-like behavior.
+        sel = alt.selection_point(fields=["선거명_표시","계열"], on="pointerover", clear="mouseout", empty="none")
+
+        HIT_SIZE = 650  # [EN] large transparent circle to create a hover hitbox
         hit = base.mark_circle(size=HIT_SIZE, opacity=0).encode(
             x=x_shared,
             y="득표율:Q",
@@ -494,13 +499,18 @@ def render_vote_trend_chart(ts: pd.DataFrame, *, box_height_px: int = 420):
                 alt.Tooltip("계열:N", title="계열"),
                 alt.Tooltip("득표율:Q", title="득표율(%)", format=".1f")
             ]
-        ).transform_filter(sel) 
+        ).transform_filter(sel)
+
+        # --- Scroll/drag zoom on X (bind scales) ---
+        # NOTE [EN]: Minimal one-liner to enable wheel & drag zoom on the X axis.
+        zoom_x = alt.selection_interval(bind="scales", encodings=["x"])
 
         chart = (
             (lines + hit + pts)
-            .properties(height=box_height_px)
+            .add_params(zoom_x)
+            .properties(height=box_height_px, padding={"top": 36, "right": 8, "bottom": 8, "left": 8})  # [EN] extra top space for legend
             .configure_view(stroke=None)
-            .configure(tooltip={"content": "encoding"})  # keep tooltips to only encoded fields
+            .configure(tooltip={"content": "encoding"})
         )
 
         st.altair_chart(chart, use_container_width=True, theme=None)
@@ -815,6 +825,7 @@ def render_region_detail_layout(
         render_incumbent_card(df_cur)
     with c3:
         render_prg_party_box(df_prg, df_pop)
+
 
 
 
