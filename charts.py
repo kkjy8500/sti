@@ -202,27 +202,29 @@ def render_population_box(pop_df: pd.DataFrame, *, box_height_px: int = 180):
     )
 
     # --- Two-bar chart (blue = region, gray = 10-avg) ---
-    # English footnote: Precomputed color column avoids predicate bugs on Altair v5.
+    # Precomputed color column avoids predicate bugs on Altair v5.
     bar_h = 110
     if isinstance(avg_total, (int, float)) and avg_total > 0:
         bar_df = pd.DataFrame({"항목": ["해당 지역", "10개 평균"], "값": [float(region_total), float(avg_total)]})
-        xmax  = max(float(region_total), float(avg_total))
     else:
         bar_df = pd.DataFrame({"항목": ["해당 지역"], "값": [float(region_total)]})
-        xmax  = float(region_total)
-
-    # Ensure positive domain so bars remain visible even if zeros were parsed before.
-    safe_xmax = max(1.0, xmax * 1.1)
+    
+    # ✅ Ensure chart renders even for small/zero data
+    if bar_df.empty or bar_df["값"].sum() == 0:
+        bar_df.loc[0] = ["해당 지역", 1.0]
+    
+    xmax = max(bar_df["값"].max(), 1.0)
     bar_df["색상"] = bar_df["항목"].map(lambda x: COLOR_BLUE if x == "해당 지역" else "#9CA3AF")
-
+    
     chart = (
         alt.Chart(bar_df)
         .mark_bar()
         .encode(
-            x=alt.X("값:Q", axis=alt.Axis(format="~,", title=None), scale=alt.Scale(domain=[0, safe_xmax], nice=False)),
-            y=alt.Y("항목:N", title=None, sort=["해당 지역","10개 평균"]),
+            x=alt.X("값:Q", axis=alt.Axis(format="~,", title=None),
+                    scale=alt.Scale(domain=[0, xmax * 1.1], nice=False)),
+            y=alt.Y("항목:N", title=None, sort=["해당 지역", "10개 평균"]),
             color=alt.Color("색상:N", scale=None, legend=None),
-            tooltip=[alt.Tooltip("항목:N", title="구분"), alt.Tooltip("값:Q", title="유권자수", format=",.0f")]
+            tooltip=[alt.Tooltip("항목:N"), alt.Tooltip("값:Q", title="유권자수", format=",.0f")]
         )
         .properties(height=bar_h, padding={"top":0,"bottom":0,"left":0,"right":0})
         .configure_view(stroke=None)
@@ -295,46 +297,28 @@ def render_age_highlight_chart(pop_df: pd.DataFrame, *, box_height_px: int = 180
     )
 
     # Robust caption inside the chart area using a tiny vconcat text panel
-    # English footnotes:
-    # - Use 0~1 normalized coords to avoid pixel math & clipping on resize.
-    # - Change panel_h to adjust spacing under the donut; num_font_px/lbl_font_px to resize texts.
+    # - panel_h controls spacing under donut (smaller = tighter).
     label_map = {Y: "청년층(18~39세)", M: "중년층(40~59세)", O: "고령층(65세 이상)"}
     idx = labels_order.index(focus)
     pct_txt = f"{(ratios100[idx]):.1f}%"
     num_font_px = 28
     lbl_font_px = 14
-    panel_h = 20
-
+    panel_h = 8  # ✅ reduce gap between donut and text
+    
     txt_df = pd.DataFrame({"x":[0.5], "y":[0.5], "num":[pct_txt], "lbl":[label_map.get(focus, focus)]})
-
-    num = (
-        alt.Chart(txt_df)
-        .mark_text(fontWeight="bold", fontSize=num_font_px, color="#0f172a")
-        .encode(
-            x=alt.X("x:Q", scale=alt.Scale(domain=[0,1]), axis=None),
-            y=alt.Y("y:Q", scale=alt.Scale(domain=[0,1]), axis=None),
-            text="num:N"
-        )
-    )
-    lbl = (
-        alt.Chart(txt_df)
-        .mark_text(fontSize=lbl_font_px, color="#475569", dy=30)
-        .encode(
-            x=alt.X("x:Q", scale=alt.Scale(domain=[0,1]), axis=None),
-            y=alt.Y("y:Q", scale=alt.Scale(domain=[0,1]), axis=None),
-            text="lbl:N"
-        )
-    )
+    
+    num = alt.Chart(txt_df).mark_text(fontWeight="bold", fontSize=num_font_px, color="#0f172a") \
+        .encode(x=alt.X("x:Q", scale=alt.Scale(domain=[0,1]), axis=None),
+                y=alt.Y("y:Q", scale=alt.Scale(domain=[0,1]), axis=None),
+                text="num:N")
+    lbl = alt.Chart(txt_df).mark_text(fontSize=lbl_font_px, color="#475569", dy=26) \
+        .encode(x=alt.X("x:Q", scale=alt.Scale(domain=[0,1]), axis=None),
+                y=alt.Y("y:Q", scale=alt.Scale(domain=[0,1]), axis=None),
+                text="lbl:N")
+    
     text_panel = (num + lbl).properties(height=panel_h)
-
-    # Concat first, THEN apply any configure_* at top-level
-    chart_all = (
-        alt.vconcat(base, text_panel)
-        .resolve_scale(x="independent", y="independent")
-        .properties(spacing=0)
-        .configure_view(stroke=None)  # ✅ top-level config is safe here
-    )
-
+    chart_all = alt.vconcat(base, text_panel).resolve_scale(x="independent", y="independent") \
+        .properties(spacing=0).configure_view(stroke=None)
     st.altair_chart(chart_all, use_container_width=True, theme=None)
 
 # =========================================================
@@ -384,22 +368,19 @@ def render_sex_ratio_bar(pop_df: pd.DataFrame, *, box_height_px: int = 180):
     male_color = "#1E40AF"
     female_color = "#60A5FA"
 
-    bar_size = 30
+    # bar_size controls inter-bar spacing; height controls total chart space.
+    bar_size = 38 
     bars = (
         alt.Chart(tidy)
         .mark_bar(size=bar_size)
         .encode(
             y=alt.Y("연령대표시:N", sort=[label_map[a] for a in age_buckets], title=None),
-            x=alt.X(
-                "전체비중:Q",
-                scale=alt.Scale(domain=[0, 0.30]),
-                axis=alt.Axis(format=".0%", title="전체 기준 구성비(%)", grid=True, titlePadding=30)
-            ),
-            color=alt.Color(
-                "성별:N",
-                scale=alt.Scale(domain=["남성","여성"], range=[male_color, female_color]),
-                legend=alt.Legend(title=None, orient="top")
-            ),
+            x=alt.X("전체비중:Q",
+                    scale=alt.Scale(domain=[0, 0.35]),  # ✅ slightly wider range
+                    axis=alt.Axis(format=".0%", title="전체 기준 구성비(%)", grid=True, titlePadding=30)),
+            color=alt.Color("성별:N",
+                            scale=alt.Scale(domain=["남성","여성"], range=[male_color, female_color]),
+                            legend=alt.Legend(title=None, orient="top")),
             tooltip=[
                 alt.Tooltip("연령대표시:N", title="연령대"),
                 alt.Tooltip("성별:N", title="성별"),
@@ -408,7 +389,7 @@ def render_sex_ratio_bar(pop_df: pd.DataFrame, *, box_height_px: int = 180):
                 alt.Tooltip("연령대내비중:Q", title="연령대 내부 비중", format=".1%"),
             ],
         )
-        .properties(height=box_height_px)
+        .properties(height=240)  # ✅ taller chart
         .configure_view(stroke=None)
     )
     st.altair_chart(bars, use_container_width=True, theme=None)
@@ -597,18 +578,18 @@ def render_results_2024_card(res_row_or_df: pd.DataFrame | None, df_24: pd.DataF
         gap_txt = f"{gap:.1f} %p" if isinstance(gap,(int,float)) else "N/A"
 
         html = f"""
-        <div style="display:grid; grid-template-columns: 1fr 1fr; align-items:center; gap:0; padding:6px 8px 0px 8px;">
-          <div style="text-align:center; padding:8px 6px;">
+        <div style="display:grid; grid-template-columns: 1fr 1fr; align-items:center; gap:0; padding:12px 8px 4px 8px;">  <!-- ✅ increased top padding -->
+          <div style="text-align:center; padding:10px 6px;">  <!-- ✅ slightly more space -->
             <div style="display:inline-flex; padding:6px 10px; border-radius:14px; font-weight:600; color:{c1_fg}; background:{c1_bg};">{p1}</div>
-            <div style="font-weight:700; margin-top:6px; color:{COLOR_TEXT_DARK};">{_fmt_pct(share1)}</div>
+            <div style="font-weight:700; margin-top:8px; color:{COLOR_TEXT_DARK};">{_fmt_pct(share1)}</div>
             <div style="opacity:.8;">{cand1}</div>
           </div>
-          <div style="text-align:center; padding:8px 6px; border-left:1px solid #EEF2F7;">
+          <div style="text-align:center; padding:10px 6px; border-left:1px solid #EEF2F7;">
             <div style="display:inline-flex; padding:6px 10px; border-radius:14px; font-weight:600; color:{c2_fg}; background:{c2_bg};">{p2}</div>
-            <div style="font-weight:700; margin-top:6px; color:{COLOR_TEXT_DARK};">{_fmt_pct(share2)}</div>
+            <div style="font-weight:700; margin-top:8px; color:{COLOR_TEXT_DARK};">{_fmt_pct(share2)}</div>
             <div style="opacity:.8;">{cand2}</div>
           </div>
-          <div style="grid-column: 1 / -1; text-align:center; padding:10px 8px 6px; border-top:1px solid #EEF2F7;">
+          <div style="grid-column: 1 / -1; text-align:center; padding:12px 8px 8px; border-top:1px solid #EEF2F7;">  <!-- ✅ more breathing space -->
             <div style="color:#6B7280; font-weight:600; margin-bottom:4px;">1~2위 격차</div>
             <div style="font-weight:700; color:{COLOR_TEXT_DARK};">{gap_txt}</div>
           </div>
@@ -719,19 +700,19 @@ def render_prg_party_box(prg_row: pd.DataFrame|None=None, pop_row: pd.DataFrame|
 
         # --- KPI (kept typography consistent with population box) ---
         html = f"""
-        <div style="display:grid; grid-template-columns: 1fr 1fr; align-items:center; gap:12px; margin-top:2px; margin-bottom:0; padding:0 8px;">
-            <div style="text-align:center; padding:8px 6px;">
+        <div style="display:grid; grid-template-columns: 1fr 1fr; align-items:center; gap:12px; margin-top:0; margin-bottom:0; padding:0 8px;">
+            <div style="text-align:center;">
                 <div style="color:#6B7280; font-weight:600; margin-bottom:2px;">진보 득표력</div>
                 <div style="font-weight:800; color:#111827;">{_fmt_pct(strength) if strength is not None else 'N/A'}</div>
             </div>
-            <div style="text-align:center; padding:8px 6px;">
+            <div style="text-align:center;">
                 <div style="color:#6B7280; font-weight:600; margin-bottom:2px;">진보당 당원수</div>
                 <div style="font-weight:800; color:#111827;">{(f"{members:,}명" if isinstance(members,int) else "N/A")}</div>
             </div>
         </div>
         """
         from streamlit.components.v1 import html as html_component
-        html_component(html, height=250, scrolling=False)
+        html_component(html, height=250, scrolling=False)  # ✅ fixed height consistent with others
 
         # --- Mini two-bar (Region vs 10-avg) ---
         try:
@@ -821,17 +802,18 @@ def render_region_detail_layout(
 
     # --- 정치지형 섹션: 3박스 높이 동일 (stretch) ---
     st.markdown("### 🗳️ 선거 결과 및 정치지형")
-    with st.container():
+    with st.container(border=True, height="stretch"):  # ✅ outer only
         c1, c2, c3 = st.columns(3, gap="small")
-
-        with c1.container(border=True, height="stretch"):
+    
+        with c1.container(height="stretch"):  # ✅ inner border removed
             render_results_2024_card(df_24)
-
-        with c2.container(border=True, height="stretch"):
+    
+        with c2.container(height="stretch"):
             render_incumbent_card(df_cur)
-
-        with c3.container(border=True, height="stretch"):
+    
+        with c3.container(height="stretch"):
             render_prg_party_box(df_prg, df_pop)
+
 
 
 
