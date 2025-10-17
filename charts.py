@@ -266,7 +266,7 @@ def render_age_highlight_chart(pop_df: pd.DataFrame, *, box_height_px: int = 180
 
     # change the height px to change the space between buttons and donut chart
     # HACK: Use markdown to add vertical space (e.g., 10px) between the radio buttons and the chart.
-    st.markdown("<div style='height: 35px;'></div>", unsafe_allow_html=True)  
+    st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)  
 
     # Donut base
     inner_r, outer_r = 68, 106
@@ -470,7 +470,7 @@ def render_vote_trend_chart(ts: pd.DataFrame, *, box_height_px: int = 420):
             "선거명_표시:N",
             sort=None,
             scale=alt.Scale(domain=order),
-            axis=alt.Axis(labelAngle=-32, labelOverlap=False, labelPadding=12, labelLimit=280, title="선거명")
+            axis=alt.Axis(labelAngle=-32, labelOverlap=False, labelPadding=20, labelLimit=280, title="선거명")
         )
 
         base = alt.Chart(long_df)
@@ -595,7 +595,7 @@ def render_results_2024_card(res_row_or_df: pd.DataFrame | None, df_24: pd.DataF
         gap_txt = f"{gap:.1f} %p" if isinstance(gap,(int,float)) else "N/A"
 
         html = f"""
-        <div style="display:grid; grid-template-columns: 1fr 1fr; align-items:center; gap:0; padding:6px 8px 2px 8px;">
+        <div style="display:grid; grid-template-columns: 1fr 1fr; align-items:center; gap:0; padding:6px 8px 0px 8px;">
           <div style="text-align:center; padding:8px 6px;">
             <div style="display:inline-flex; padding:6px 10px; border-radius:14px; font-weight:600; color:{c1_fg}; background:{c1_bg};">{p1}</div>
             <div style="font-weight:700; margin-top:6px; color:{COLOR_TEXT_DARK};">{_fmt_pct(share1)}</div>
@@ -729,7 +729,7 @@ def render_prg_party_box(prg_row: pd.DataFrame|None=None, pop_row: pd.DataFrame|
         </div>
         """
         from streamlit.components.v1 import html as html_component
-        html_component(html, height=240, scrolling=False)
+        html_component(html, height=250, scrolling=False)
 
         # --- Mini two-bar (Region vs 10-avg) ---
         try:
@@ -796,35 +796,36 @@ def render_region_detail_layout(
     df_cur: pd.DataFrame | None = None,
     df_prg: pd.DataFrame | None = None,
 ):
-    # Version tag (optional)
-    st.caption(f"charts.py tag: v2025-10-17d | Streamlit {getattr(st, '__version__', 'unknown')} | Altair {getattr(alt, '__version__', 'unknown')}")
 
     st.markdown("### 👥 인구 정보")
     # ratios tweaked: shrink 1st/2nd a bit, enlarge 3rd; gap small
-    col1, col2, col3 = st.columns([1.0, 1.35, 2.85], gap="small")
-
-    with col1.container(border=True, height="stretch"):
-        render_population_box(df_pop, box_height_px=240)
-
-    with col2.container(border=True, height="stretch"):
-        st.markdown("**연령 구성**")
-        render_age_highlight_chart(df_pop, box_height_px=240)
-
-    with col3.container(border=True, height="stretch"):
-        st.markdown("**연령별, 성별 인구분포**")
-        render_sex_ratio_bar(df_pop, box_height_px=340)
+    with st.container(height="stretch")
+        col1, col2, col3 = st.columns([1.0, 1.35, 2.85], gap="small")
+    
+        with col1.container(border=True, height="stretch"):
+            render_population_box(df_pop, box_height_px=240)
+    
+        with col2.container(border=True, height="stretch"):
+            st.markdown("**연령 구성**")
+            render_age_highlight_chart(df_pop, box_height_px=240)
+    
+        with col3.container(border=True, height="stretch"):
+            st.markdown("**연령별, 성별 인구분포**")
+            render_sex_ratio_bar(df_pop, box_height_px=340)
 
     st.markdown("### 📈 정당성향별 득표추이")
     render_vote_trend_chart(df_trend, box_height_px=420)
 
     st.markdown("### 🗳️ 선거 결과 및 정치지형")
-    c1, c2, c3 = st.columns(3)
-    with c1:
-        render_results_2024_card(df_24)
-    with c2:
-        render_incumbent_card(df_cur)
-    with c3:
-        render_prg_party_box(df_prg, df_pop)
+    with st.container(height="stretch")
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            render_results_2024_card(df_24)
+        with c2:
+            render_incumbent_card(df_cur)
+        with c3:
+            render_prg_party_box(df_prg, df_pop)
+
 
 
 
