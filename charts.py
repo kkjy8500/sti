@@ -779,7 +779,7 @@ def render_prg_party_box(
                     .encode(
                         x=alt.X(
                             "값:Q",
-                            axis=alt.Axis(format=".00%", title=None),
+                            axis=alt.Axis(format=".0%", values=[i/100 for i in range(0, 101, 2)], title=None),
                             scale=alt.Scale(domain=[0, max(bar_df["값"])*1.1])
                         ),
                         y=alt.Y("항목:N", title=None),
@@ -790,7 +790,7 @@ def render_prg_party_box(
                         ),
                         tooltip=[
                             alt.Tooltip("항목:N", title="구분"),
-                            alt.Tooltip("값:Q", title="득표력", format=".1%")
+                            alt.Tooltip("값:Q", title="득표력", format=".2%")
                         ]
                     )
                 ).properties(height=chart_h, padding={"top":0, "bottom":0, "left":0, "right":0}).configure_view(stroke=None)
@@ -843,6 +843,7 @@ def render_region_detail_layout(
         render_incumbent_card(df_cur)
     with c3:
         render_prg_party_box(df_prg, df_pop)
+
 
 
 
