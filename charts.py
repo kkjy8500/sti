@@ -156,14 +156,14 @@ def render_population_box(pop_df: pd.DataFrame, *, box_height_px: int = 240):
     df[total_col] = df[total_col].apply(_to_num)
     if float_col: df[float_col] = df[float_col].apply(_to_num)
 
-    # Region total
+    # --- Region aggregate (robust to multi-rows) ---
     if code_col:
         grp = df.groupby(code_col, dropna=False)[[total_col]].sum(min_count=1).reset_index()
         region_total = float(grp[total_col].iloc[0]); region_cnt = int(grp.shape[0])
     else:
         region_total = float(df[total_col].sum());    region_cnt = 1
 
-    # 10-avg fallback loader
+    # --- 10-avg fallback (when single region given) ---
     avg_total = None
     if region_cnt >= 2:
         avg_total = float(df.groupby(code_col, dropna=False)[total_col].sum().mean())
@@ -176,7 +176,7 @@ def render_population_box(pop_df: pd.DataFrame, *, box_height_px: int = 240):
                 pop_all[tcol] = pop_all[tcol].apply(_to_num)
                 avg_total = float(pop_all.groupby(ccol, dropna=False)[tcol].sum().mean()) if ccol else float(pop_all[tcol].mean())
 
-    # --- KPIs (single column stacked) ---
+    # --- KPIs (simple vertical stack; keep typography consistent) ---
     floating_value_txt = (f"{int(round(float(df[float_col].sum()))):,}명" if float_col else "N/A")
     st.markdown(
         f"""
@@ -194,41 +194,38 @@ def render_population_box(pop_df: pd.DataFrame, *, box_height_px: int = 240):
         unsafe_allow_html=True,
     )
 
-# --- Two-bar chart (match Progressive mini chart style; numbers instead of %) ---
-use_two_bars = True
-bar_h = 110
-if use_two_bars:
-    if isinstance(avg_total, (int, float)) and avg_total and avg_total > 0:
-        bar_df = pd.DataFrame({"항목": ["해당 지역", "10개 평균"],
-                               "값": [float(region_total), float(avg_total)]})
-        x_max = max(float(region_total), float(avg_total)) * 1.1
-    else:
-        bar_df = pd.DataFrame({"항목": ["해당 지역"], "값": [float(region_total)]})
-        x_max = float(region_total) * 1.1 if region_total > 0 else 1.0
+    # --- Two-bar chart (match Progressive mini chart style; numbers instead of %) ---
+    use_two_bars = True
+    bar_h = 110
+    if use_two_bars:
+        if isinstance(avg_total, (int, float)) and avg_total and avg_total > 0:
+            bar_df = pd.DataFrame({"항목": ["해당 지역", "10개 평균"], "값": [float(region_total), float(avg_total)]})
+            x_max = max(float(region_total), float(avg_total)) * 1.1
+        else:
+            bar_df = pd.DataFrame({"항목": ["해당 지역"], "값": [float(region_total)]})
+            x_max = float(region_total) * 1.1 if region_total > 0 else 1.0
 
-    # ✅ Add: precomputed color column (robust; no predicate/expression)
-    bar_df["색상"] = bar_df["항목"].map(lambda x: COLOR_BLUE if x == "해당 지역" else "#9CA3AF")
+        # ✅ Precomputed color column (robust; avoids predicates/expressions)
+        bar_df["색상"] = bar_df["항목"].map(lambda x: COLOR_BLUE if x == "해당 지역" else "#9CA3AF")
 
-    chart = (
-        alt.Chart(bar_df)
-        .mark_bar()
-        .encode(
-            x=alt.X("값:Q",
-                    axis=alt.Axis(format="~,", title=None),
-                    scale=alt.Scale(domain=[0, x_max])),
-            # ✅ Optional: keep desired order (region first)
-            y=alt.Y("항목:N", title=None, sort=["해당 지역","10개 평균"]),
-            # ✅ Change: use explicit color field; no condition/predicate
-            color=alt.Color("색상:N", scale=None, legend=None),
-            tooltip=[
-                alt.Tooltip("항목:N", title="구분"),
-                alt.Tooltip("값:Q", title="유권자수", format=",.0f")
-            ]
+        chart = (
+            alt.Chart(bar_df)
+            .mark_bar()
+            .encode(
+                x=alt.X("값:Q",
+                        axis=alt.Axis(format="~,", title=None),
+                        scale=alt.Scale(domain=[0, x_max])),
+                y=alt.Y("항목:N", title=None, sort=["해당 지역","10개 평균"]),
+                color=alt.Color("색상:N", scale=None, legend=None),
+                tooltip=[
+                    alt.Tooltip("항목:N", title="구분"),
+                    alt.Tooltip("값:Q", title="유권자수", format=",.0f")
+                ]
+            )
+            .properties(height=bar_h, padding={"top":0,"bottom":0,"left":0,"right":0})
+            .configure_view(stroke=None)
         )
-        .properties(height=bar_h, padding={"top":0,"bottom":0,"left":0,"right":0})
-        .configure_view(stroke=None)
-    )
-    st.altair_chart(chart, use_container_width=True, theme=None)
+        st.altair_chart(chart, use_container_width=True, theme=None)
 
 # =========================================================
 # [Age Composition: Half Donut]
@@ -316,7 +313,7 @@ def render_age_highlight_chart(pop_df: pd.DataFrame, *, box_height_px: int = 240
     )
     lbl = (
         alt.Chart(txt_df)
-        .mark_text(fontSize=lbl_font_px, color="#475569", dy=18)
+        .mark_text(fontSize=lbl_font_px, color="#475569", dy=23)
         .encode(
             x=alt.X("x:Q", scale=alt.Scale(domain=[0,1]), axis=None),
             y=alt.Y("y:Q", scale=alt.Scale(domain=[0,1]), axis=None),
@@ -715,6 +712,7 @@ def render_prg_party_box(prg_row: pd.DataFrame|None=None, pop_row: pd.DataFrame|
         strength = _to_pct_float(r.get(col_strength)) if col_strength else None
         members  = _to_int(r.get(col_members)) if col_members else None
 
+        # --- KPI (kept typography consistent with population box) ---
         html = f"""
         <div style="display:grid; grid-template-columns: 1fr 1fr; align-items:center; gap:12px; margin-top:2px; margin-bottom:0; padding:0 8px;">
             <div style="text-align:center; padding:8px 6px;">
@@ -730,6 +728,7 @@ def render_prg_party_box(prg_row: pd.DataFrame|None=None, pop_row: pd.DataFrame|
         from streamlit.components.v1 import html as html_component
         html_component(html, height=140, scrolling=False)
 
+        # --- Mini two-bar (Region vs 10-avg) ---
         try:
             avg_strength = None
             if df_all is not None:
@@ -749,10 +748,9 @@ def render_prg_party_box(prg_row: pd.DataFrame|None=None, pop_row: pd.DataFrame|
                     "값": [strength/100.0 if strength>1 else strength,
                           (avg_strength/100.0 if avg_strength>1 else avg_strength)]
                 })
-            
-                # ✅ Add: precomputed color column (robust; avoids vega expr on non-ascii fields)
+                # ✅ Precomputed color column (robust; avoids predicates/expressions)
                 bar_df["색상"] = bar_df["항목"].map(lambda x: COLOR_BLUE if x == "해당 지역" else "#9CA3AF")
-            
+
                 mini = (
                     alt.Chart(bar_df)
                     .mark_bar()
@@ -760,9 +758,7 @@ def render_prg_party_box(prg_row: pd.DataFrame|None=None, pop_row: pd.DataFrame|
                         x=alt.X("값:Q",
                                 axis=alt.Axis(format=".0%"),
                                 scale=alt.Scale(domain=[0, float(bar_df["값"].max())*1.1])),
-                        # ✅ Optional: keep desired order (region first)
                         y=alt.Y("항목:N", title=None, sort=["해당 지역","10개 평균"]),
-                        # ✅ Change: use explicit color field; no condition/predicate
                         color=alt.Color("색상:N", scale=None, legend=None),
                         tooltip=[alt.Tooltip("항목:N"), alt.Tooltip("값:Q", format=".1%")]
                     )
@@ -771,8 +767,10 @@ def render_prg_party_box(prg_row: pd.DataFrame|None=None, pop_row: pd.DataFrame|
                 )
                 st.altair_chart(mini, use_container_width=True, theme=None)
         except Exception:
+            # Keep silent to avoid breaking the whole page
             pass
-            
+
+
 # =========================================================
 # [Region Detail Layout]
 # HOW TO CHANGE LATER:
@@ -815,6 +813,7 @@ def render_region_detail_layout(
         render_incumbent_card(df_cur)
     with c3:
         render_prg_party_box(df_prg, df_pop)
+
 
 
 
