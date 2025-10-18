@@ -231,10 +231,10 @@ if menu == "종합":
     # --- Colors & scaling ---
     bar_colors = {
         "합계": "#3498DB",
-        "유권자환경": "#2ECC71",
+        "유권자환경": "#48C9B0",
         "정치지형": "#1ABC9C",
-        "주체역량": "#48C9B0",
-        "상대역량": "#76D7C4",
+        "주체역량": "#76D7C4",
+        "상대역량": "#39C483",
     }
     vmax = {c: (float(df[c].max()) if df[c].notna().any() else 0.0) for c in score_cols}
 
