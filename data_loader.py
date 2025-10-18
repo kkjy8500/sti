@@ -1,35 +1,46 @@
-# data_loader.py
-# Purpose: File reads only. No visualization. Bookmark-first helpers.
-# How to change later:
-# - To change default encodings: edit ENCODINGS.
-# - To change default data directory: pass a different Path from app.py.
-
+# data_loader.py (drop-in replace for the whole file)
 from __future__ import annotations
 import pandas as pd
 from pathlib import Path
 from typing import Optional, Dict, List, Union
+import streamlit as st
 
+# How to change later:
+# - Add/remove encodings below if your files use a new encoding.
 ENCODINGS = ["utf-8-sig", "utf-8", "cp949", "euc-kr"]
 
-def _read_csv_safe(path: Path, dtype: Optional[Dict[str, Union[str, type]]] = None) -> pd.DataFrame:
-    if not path.exists():
+# ---------- Cached readers (avoid re-opening files each run) ----------
+@st.cache_data(show_spinner=False)
+def _read_csv_impl(path_str: str, mtime_ns: int, dtype: Optional[Dict[str, Union[str, type]]]) -> pd.DataFrame:
+    """Low-level cached reader keyed by (path, mtime)."""
+    p = Path(path_str)
+    if not p.exists():
         return pd.DataFrame()
     for enc in ENCODINGS:
         try:
-            return pd.read_csv(path, encoding=enc, dtype=dtype)
+            return pd.read_csv(p, encoding=enc, dtype=dtype)
         except UnicodeDecodeError:
             continue
         except Exception:
             continue
     return pd.DataFrame()
 
+def _read_csv_safe(path: Path, dtype: Optional[Dict[str, Union[str, type]]] = None) -> pd.DataFrame:
+    """One open per path; subsequent runs served from cache until file changes."""
+    if not path.exists():
+        return pd.DataFrame()
+    mtime = path.stat().st_mtime_ns
+    return _read_csv_impl(str(path), mtime, dtype)
+
 def _read_csv_safe_any(paths: List[Path], dtype: Optional[Dict[str, Union[str, type]]] = None) -> pd.DataFrame:
+    """Try candidates; first successful read is cached by its own (path, mtime)."""
     for p in paths:
         df = _read_csv_safe(p, dtype=dtype)
         if not df.empty:
             return df
     return pd.DataFrame()
 
+# ---------- Light post-processing helpers ----------
 def _tidy_columns(df: pd.DataFrame) -> pd.DataFrame:
     if df is None or df.empty:
         return df
@@ -51,24 +62,15 @@ def _ensure_str(df: pd.DataFrame, cols: List[str]) -> pd.DataFrame:
             df[c] = df[c].astype(str).str.strip()
     return df
 
-# -------- Bookmark --------
+# ---------- Bookmark ----------
 def load_bookmark(data_dir: Path) -> pd.DataFrame:
     df = _read_csv_safe_any([data_dir / "bookmark.csv", Path("/mnt/data") / "bookmark.csv"])
     return _tidy_columns(df)
 
 def load_bookmark_map(df_bookmark: pd.DataFrame) -> dict:
-    """
-    Return dict standard_key -> actual_column.
-    How to change later:
-    - If your bookmark has different schema, edit this parser.
-    Supported simple formats:
-    1) Two columns: 'std','actual'
-    2) Wide: first row contains actual names keyed by std headers
-    """
+    """Return dict standard_key -> actual_column. (Two formats supported)"""
     if df_bookmark is None or df_bookmark.empty:
         return {}
-
-    # Case 1: explicit pairs
     lower_cols = [str(c).strip().lower() for c in df_bookmark.columns]
     if "std" in lower_cols and "actual" in lower_cols:
         std_idx = lower_cols.index("std"); act_idx = lower_cols.index("actual")
@@ -79,18 +81,13 @@ def load_bookmark_map(df_bookmark: pd.DataFrame) -> dict:
             if std and act:
                 out[std] = act
         return out
-
-    # Case 2: wide header row – take first row as values
-    # e.g., columns: code, region, sido, total_voters, youth, middle, old, ...
     try:
         first = df_bookmark.iloc[0].to_dict()
-        # Only include non-empty strings
-        out = {str(k).strip(): str(v).strip() for k, v in first.items() if isinstance(v, str) and v.strip()}
-        return out
+        return {str(k).strip(): str(v).strip() for k, v in first.items() if isinstance(v, str) and v.strip()}
     except Exception:
         return {}
 
-# -------- Public loaders --------
+# ---------- Public loaders ----------
 def load_population_agg(data_dir: Path) -> pd.DataFrame:
     df = _read_csv_safe_any([data_dir / "population.csv", Path("/mnt/data") / "population.csv"])
     df = _tidy_columns(df)
