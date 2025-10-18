@@ -87,34 +87,34 @@ def _render_topbar(page_title: str | None, app_title: str | None):
 def render_population_box(pop_sel: pd.DataFrame, *, df_pop_all: pd.DataFrame, bookmark_map: dict | None = None, box_height_px: int = 240):
     if pop_sel is None or pop_sel.empty:
         st.info("인구 데이터가 없습니다."); return
+
     df_s = _norm_cols(pop_sel.copy())
     df_a = _norm_cols(df_pop_all.copy()) if df_pop_all is not None else pd.DataFrame()
 
     COLOR_BLUE = "#3498DB"
     COLOR_GRAY = "#95A5A6"
 
-    # --- [Guard] 필수 컬럼 탐색 실패 시 즉시 반환 (왜 안 뜨는지 메시지 제공) ---
+    # [Guard] 필수 컬럼 확인
     total_col = _col(df_s, bookmark_map, "total_voters", ["전체 유권자 수","전체 유권자","전체유권자","total_voters"])
-    if not total_col or total_col not in df_s.columns:
+    if (not total_col) or (total_col not in df_s.columns):
         st.info("`전체 유권자 수` 컬럼을 찾지 못했습니다."); return
 
     float_col = _col(df_s, bookmark_map, "floating", ["유동인구","전입전출","전입+전출","유출입","floating_pop"], required=False)
 
-    # --- [Casting] 숫자형 변환을 확실히 ---
+    # [Casting] 숫자형 변환 통일
     df_s[total_col] = pd.to_numeric(df_s[total_col].apply(_to_num), errors="coerce")
     if float_col and float_col in df_s.columns:
         df_s[float_col] = pd.to_numeric(df_s[float_col].apply(_to_num), errors="coerce")
 
     region_total = float(df_s[total_col].sum(skipna=True)) if df_s[total_col].notna().any() else 0.0
 
-    # --- [Avg calc fix] 단순 평균으로, groupby(0) 제거 ---
+    # [Avg] 단순 평균 (groupby 제거)
     avg_total = None
-    if df_a is not None and not df_a.empty:
-        if total_col in df_a.columns:
-            avg_total = pd.to_numeric(df_a[total_col].apply(_to_num), errors="coerce").mean()
-            avg_total = float(avg_total) if pd.notna(avg_total) else None
+    if not df_a.empty and (total_col in df_a.columns):
+        avg_total = pd.to_numeric(df_a[total_col].apply(_to_num), errors="coerce").mean()
+        avg_total = float(avg_total) if pd.notna(avg_total) else None
 
-    # --- KPI ---
+    # KPI 두 칸
     c1, c2 = st.columns(2)
     with c1:
         st.markdown(
@@ -126,7 +126,7 @@ def render_population_box(pop_sel: pd.DataFrame, *, df_pop_all: pd.DataFrame, bo
             """, unsafe_allow_html=True
         )
     with c2:
-        floating_value_txt = ("N/A")
+        floating_value_txt = "N/A"
         if float_col and float_col in df_s.columns and df_s[float_col].notna().any():
             floating_value_txt = f"{int(round(float(df_s[float_col].sum()))):,}명"
         st.markdown(
@@ -138,23 +138,25 @@ def render_population_box(pop_sel: pd.DataFrame, *, df_pop_all: pd.DataFrame, bo
             """, unsafe_allow_html=True
         )
 
-    # --- Bar data ---
+    # Bar data + 안전 도메인
     bar_h = 170
     if isinstance(avg_total, (int, float)) and pd.notna(avg_total) and avg_total > 0:
         bar_df = pd.DataFrame({"항목": ["해당 지역", "10개 평균"], "값": [float(region_total), float(avg_total)]})
         x_max = max(float(region_total), float(avg_total)) * 1.1
     else:
         bar_df = pd.DataFrame({"항목": ["해당 지역"], "값": [float(region_total)]})
-        x_max = float(region_total) * 1.1 if region_total > 0 else 1.0  # [Edge] 0 데이터일 때 축이 0~1로 안전 폴백
+        x_max = float(region_total) * 1.1 if region_total > 0 else 1.0
 
-    # --- Chart ---
+    if not bar_df["값"].notna().any():
+        st.info("표시할 유효한 값이 없습니다."); return
+
     chart = (
         alt.Chart(bar_df)
         .mark_bar()
         .encode(
             y=alt.Y("항목:N", title=None, axis=alt.Axis(labels=True, ticks=False)),
             x=alt.X("값:Q", title=None, axis=alt.Axis(format="~,"), scale=alt.Scale(domain=[0, x_max], nice=False)),
-            color=alt.condition(alt.datum.항목 == "해당 지역", alt.value(COLOR_BLUE), alt.value(COLOR_GRAY)),
+            color=alt.condition(alt.datum['항목'] == "해당 지역", alt.value(COLOR_BLUE), alt.value(COLOR_GRAY)),
             tooltip=[alt.Tooltip("항목:N", title="구분"), alt.Tooltip("값:Q", title="유권자수", format=",.0f")],
         )
         .properties(height=bar_h, padding={"left":0, "right":0, "top":4, "bottom":2})
@@ -751,6 +753,7 @@ def render_region_detail_layout(
             render_incumbent_card(df_cur_sel)
         with c3.container(height="stretch"):
             render_prg_party_box(df_idx_sel, df_idx_all=df_idx_all)
+
 
 
 
