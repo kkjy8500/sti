@@ -217,9 +217,41 @@ if menu == "종합":
     st.caption("에스티아이")
 
     # --- Load data
-    CSV_PATH = Path("mnt/sti/data/scoring.csv")  # your uploaded file lives here
-    df = pd.read_csv(CSV_PATH)
+    def _find_scoring_csv() -> Path | None:
+        # Try common project-relative paths first
+        candidates = [
+            Path(__file__).resolve().parent / "data" / "scoring.csv",  # ./data/scoring.csv next to app.py
+            Path.cwd() / "data" / "scoring.csv",                       # working dir fallback
+            Path("data/scoring.csv"),                                  # relative fallback
+            Path("/mount/src/sti/data/scoring.csv"),                   # streamlit cloud repo path (common)
+            Path("/mnt/data/sti/data/scoring.csv"),                    # mounted data (less common)
+            Path("/mnt/data/scoring.csv"),                             # last resort
+        ]
+        for p in candidates:
+            if p.exists():
+                return p
+        return None
     
+    CSV_PATH = _find_scoring_csv()
+    if not CSV_PATH:
+        st.error("`scoring.csv`를 찾을 수 없습니다. 경로를 확인하세요: `sti/data/scoring.csv` 위치에 두는 것을 권장합니다.")
+        st.stop()
+    
+    # Robust read: encoding & delimiter inference (comma or tab)
+    tried = []
+    for enc in ("utf-8-sig", "utf-8", "cp949", "euc-kr"):
+        try:
+            df = pd.read_csv(CSV_PATH, encoding=enc)
+            # If it collapsed into a single column, try tab-delimited
+            if df.shape[1] == 1:
+                df = pd.read_csv(CSV_PATH, encoding=enc, sep="\t")
+            break
+        except Exception as e:
+            tried.append(f"{enc}: {e}")
+    else:
+        st.error("`scoring.csv` 읽기에 실패했습니다. 인코딩/구분자 확인이 필요합니다.")
+        st.stop()
+
     # --- Ensure numeric dtypes for score columns
     label_col = "region"
     score_cols = [c for c in df.columns if c != label_col]
@@ -259,6 +291,7 @@ if menu == "종합":
         hide_index=True,
         use_container_width=True,
     )
+
 
 # -----------------------------
 # Page: 지역별 분석
