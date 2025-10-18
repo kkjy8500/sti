@@ -257,40 +257,34 @@ if menu == "종합":
     score_cols = [c for c in df.columns if c != label_col]
     df[score_cols] = df[score_cols].apply(pd.to_numeric, errors="coerce")
     
-    # --- Per-column bar colors (edit as you like)
+    # --- Bar colors per column
     bar_colors = {
         "합계": "#2563EB",       # blue
-        "유권자환경": "#059669",  # emerald/green
+        "유권자환경": "#059669",  # green
         "정치지형": "#F59E0B",   # amber
         "주체역량": "#DC2626",   # red
         "상대역량": "#7C3AED",   # violet
     }
     
-    # --- Build Streamlit column configs with in-cell bars
-    # Tip: ProgressColumn draws a left-aligned horizontal bar sized by the value.
-    col_config = {
-        label_col: st.column_config.TextColumn("region", help="선정 지역명"),
-    }
+    # --- Build pandas Styler: left-aligned in-cell bars with per-column colors
+    fmt_map = {col: "{:.1f}" for col in score_cols}
+    styler = (
+        df.style
+          .hide(axis="index")                 # hide index
+          .set_properties(subset=[label_col], **{"white-space": "nowrap"})
+          .format(fmt_map)
+    )
+    
+    # Apply per-column bars (left → right). vmin=0, vmax=col max for each column.
     for col in score_cols:
-        # Choose sensible min/max: start from 0, cap at observed max
-        col_min = 0.0
-        col_max = float(pd.to_numeric(df[col], errors="coerce").max())
-        col_config[col] = st.column_config.ProgressColumn(
-            col,
-            help=f"{col} 점수 (bar-in-cell)",
-            min_value=col_min,
-            max_value=col_max,
-            format="%.1f",
-            color=bar_colors.get(col, "#4B5563"),  # fallback gray
-        )
+        vmax = float(df[col].max()) if df[col].notna().any() else 0.0
+        # align="left" ensures the bar starts at the left edge of the cell
+        styler = styler.bar(subset=[col], color=bar_colors.get(col, "#6B7280"),
+                            vmin=0.0, vmax=vmax, align="left")
     
     st.subheader("지역별 스코어 표 (막대 포함)")
-    st.dataframe(
-        df,
-        column_config=col_config,
-        hide_index=True,
-        use_container_width=True,
-    )
+    # Use st.write for Styler HTML (works well in Streamlit)
+    st.write(styler)
 
 
 # -----------------------------
