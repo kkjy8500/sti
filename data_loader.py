@@ -114,7 +114,7 @@ def load_current_info(data_dir: Path) -> pd.DataFrame:
     return _ensure_str(df, ["코드", "선거구명", "지역구", "이름", "정당"])
 
 def load_index_sample(data_dir: Path) -> pd.DataFrame:
-    df = _read_csv_safe_any([data_dir / "index_sample1012.csv", Path("/mnt/data") / "index_sample1012.csv"])
+    df = _read_csv_safe_any([data_dir / "index_sample.csv", Path("/mnt/data") / "index_sample.csv"])
     df = _tidy_columns(df)
     return _ensure_str(df, ["코드", "선거구명", "지역구"])
 
