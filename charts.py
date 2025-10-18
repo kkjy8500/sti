@@ -320,7 +320,7 @@ def render_sex_ratio_bar(pop_sel: pd.DataFrame, *, bookmark_map: dict | None = N
             x=alt.X("전체비중:Q", scale=alt.Scale(domain=[0, 0.30]), axis=alt.Axis(format=".0%", title="전체 기준 구성비(%)", grid=True)),
             color=alt.Color("성별:N", 
                             scale=alt.Scale(domain=["남성","여성"], 
-                                            range=["#5DADE2", "#85C1E9"]), # 남성 -> #5DADE2, 여성 -> #85C1E9 적용
+                                            range=["#4DA6B7", "#85C1E9"]), # 남성 -> #4DA6B7, 여성 -> #85C1E9 적용
                             legend=alt.Legend(title=None, orient="top")),
             tooltip=[
                 alt.Tooltip("연령대표시:N", title="연령대"),
@@ -740,6 +740,7 @@ def render_region_detail_layout(
             render_incumbent_card(df_cur_sel)
         with c3.container(height="stretch"):
             render_prg_party_box(df_idx_sel, df_idx_all=df_idx_all)
+
 
 
 
