@@ -9,6 +9,7 @@ import re, math
 import pandas as pd
 import streamlit as st
 import altair as alt
+import numpy as np
 from metrics import compute_24_gap
 
 alt.data_transformers.disable_max_rows()
@@ -795,6 +796,7 @@ def render_region_detail_layout(
             render_incumbent_card(df_cur_sel)
         with c3.container(height="stretch"):
             render_prg_party_box(df_idx_sel, df_idx_all=df_idx_all)
+
 
 
 
