@@ -257,35 +257,61 @@ if menu == "종합":
     score_cols = [c for c in df.columns if c != label_col]
     df[score_cols] = df[score_cols].apply(pd.to_numeric, errors="coerce")
     
-    # --- Bar colors per column
+    # --- Per-column colors
     bar_colors = {
-        "합계": "#2563EB",       # blue
-        "유권자환경": "#059669",  # green
-        "정치지형": "#F59E0B",   # amber
-        "주체역량": "#DC2626",   # red
-        "상대역량": "#7C3AED",   # violet
+        "합계": "#2563EB",
+        "유권자환경": "#059669",
+        "정치지형": "#F59E0B",
+        "주체역량": "#DC2626",
+        "상대역량": "#7C3AED",
     }
     
-    # --- Build pandas Styler: left-aligned in-cell bars with per-column colors
-    fmt_map = {col: "{:.1f}" for col in score_cols}
-    styler = (
-        df.style
-          .hide(axis="index")                 # hide index
-          .set_properties(subset=[label_col], **{"white-space": "nowrap"})
-          .format(fmt_map)
+    # --- Per-column max (0~max 스케일; 고정 100이면 vmax=100.0로 바꾸세요)
+    vmax = {c: (float(df[c].max()) if df[c].notna().any() else 0.0) for c in score_cols}
+    
+    # --- Tiny HTML table with in-cell bars (left-aligned)
+    def _bar_cell(val, col):
+        try:
+            v = float(val)
+        except Exception:
+            return f"{val}"
+        mx = vmax.get(col, 0.0) or 1.0
+        pct = max(0.0, min(100.0, (v / mx) * 100.0))
+        color = bar_colors.get(col, "#6B7280")
+        # outer: light track, inner: colored bar
+        return (
+            f'<div style="position:relative;width:100%;background:#F3F4F6;'
+            f'height:18px;border-radius:4px;overflow:hidden;">'
+            f'  <div style="width:{pct:.2f}%;height:100%;background:{color};"></div>'
+            f'  <div style="position:absolute;inset:0;display:flex;align-items:center;'
+            f'justify-content:center;font-size:12px;font-weight:600;color:#111827;">{v:.1f}</div>'
+            f'</div>'
+        )
+    
+    # Build header
+    headers = [label_col] + score_cols
+    thead = "".join([f"<th style='text-align:left;padding:6px 8px;white-space:nowrap;'>{h}</th>" for h in headers])
+    
+    # Build body
+    rows_html = []
+    for _, row in df.iterrows():
+        cells = [f"<td style='padding:6px 8px;white-space:nowrap;'>{row[label_col]}</td>"]
+        for c in score_cols:
+            cells.append(f"<td style='padding:6px 8px;'>{_bar_cell(row[c], c)}</td>")
+        rows_html.append("<tr>" + "".join(cells) + "</tr>")
+    
+    table_html = (
+        "<div style='overflow-x:auto;'>"
+        "<table style='border-collapse:separate;border-spacing:0;width:100%;font-size:13px;'>"
+        f"<thead><tr>{thead}</tr></thead>"
+        f"<tbody>{''.join(rows_html)}</tbody>"
+        "</table>"
+        "</div>"
     )
     
-    # Apply per-column bars (left → right). vmin=0, vmax=col max for each column.
-    for col in score_cols:
-        vmax = float(df[col].max()) if df[col].notna().any() else 0.0
-        # align="left" ensures the bar starts at the left edge of the cell
-        styler = styler.bar(subset=[col], color=bar_colors.get(col, "#6B7280"),
-                            vmin=0.0, vmax=vmax, align="left")
-    
     st.subheader("지역별 스코어 표 (막대 포함)")
-    # Use st.write for Styler HTML (works well in Streamlit)
-    st.write(styler)
-
+    st.markdown(table_html, unsafe_allow_html=True)
+    
 
 # -----------------------------
 # Page: 지역별 분석
