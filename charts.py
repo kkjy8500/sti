@@ -573,7 +573,7 @@ def render_prg_party_box(prg_sel: pd.DataFrame | None, *, df_idx_all: pd.DataFra
     with st.container(border=True, height="stretch"):
         st.markdown("**진보당 현황**")
         if prg_sel is None or prg_sel.empty:
-            st.info("지표 소스(index_sample1012.csv)에서 행을 찾지 못했습니다."); return
+            st.info("지표 소스(index_sample.csv)에서 행을 찾지 못했습니다."); return
 
         df = prg_sel.copy()
         df.columns = [" ".join(str(c).replace("\n"," ").replace("\r"," ").strip().split()) for c in df.columns]
@@ -690,3 +690,4 @@ def render_region_detail_layout(
             render_incumbent_card(df_cur_sel)
         with c3.container(height="stretch"):
             render_prg_party_box(df_idx_sel, df_idx_all=df_idx_all)
+
