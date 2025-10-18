@@ -85,36 +85,46 @@ def _render_topbar(page_title: str | None, app_title: str | None):
 # - Change x-axis number format: edit axis format in alt.Axis.
 # =========================================================
 def render_population_box(pop_sel: pd.DataFrame, *, df_pop_all: pd.DataFrame, bookmark_map: dict | None = None, box_height_px: int = 240):
+    # --- Hard guard: data existence ---
     if pop_sel is None or pop_sel.empty:
         st.info("인구 데이터가 없습니다."); return
+    st.markdown("<!-- DBG: population_box entered -->", unsafe_allow_html=True)
 
+    # --- Normalize headers early ---
     df_s = _norm_cols(pop_sel.copy())
     df_a = _norm_cols(df_pop_all.copy()) if df_pop_all is not None else pd.DataFrame()
 
     COLOR_BLUE = "#3498DB"
     COLOR_GRAY = "#95A5A6"
 
-    # [Guard] 필수 컬럼 확인
+    # --- Resolve columns (required/optional) ---
     total_col = _col(df_s, bookmark_map, "total_voters", ["전체 유권자 수","전체 유권자","전체유권자","total_voters"])
     if (not total_col) or (total_col not in df_s.columns):
-        st.info("`전체 유권자 수` 컬럼을 찾지 못했습니다."); return
-
+        st.error("DBG: `전체 유권자 수` 컬럼을 찾지 못했습니다. total_col=%s / cols=%s" % (total_col, list(df_s.columns))); return
     float_col = _col(df_s, bookmark_map, "floating", ["유동인구","전입전출","전입+전출","유출입","floating_pop"], required=False)
 
-    # [Casting] 숫자형 변환 통일
-    df_s[total_col] = pd.to_numeric(df_s[total_col].apply(_to_num), errors="coerce")
-    if float_col and float_col in df_s.columns:
-        df_s[float_col] = pd.to_numeric(df_s[float_col].apply(_to_num), errors="coerce")
+    # --- Safe numeric casting ---
+    try:
+        df_s[total_col] = pd.to_numeric(df_s[total_col].apply(_to_num), errors="coerce")
+        if float_col and float_col in df_s.columns:
+            df_s[float_col] = pd.to_numeric(df_s[float_col].apply(_to_num), errors="coerce")
+    except Exception as e:
+        st.exception(e); return
 
+    # --- Compute region total ---
     region_total = float(df_s[total_col].sum(skipna=True)) if df_s[total_col].notna().any() else 0.0
 
-    # [Avg] 단순 평균 (groupby 제거)
+    # --- Compute average total (simple mean) ---
     avg_total = None
     if not df_a.empty and (total_col in df_a.columns):
-        avg_total = pd.to_numeric(df_a[total_col].apply(_to_num), errors="coerce").mean()
-        avg_total = float(avg_total) if pd.notna(avg_total) else None
+        try:
+            s = pd.to_numeric(df_a[total_col].apply(_to_num), errors="coerce")
+            avg = s.mean(skipna=True)
+            avg_total = float(avg) if pd.notna(avg) else None
+        except Exception as e:
+            st.warning("DBG: avg_total 계산 실패"); st.exception(e)
 
-    # KPI 두 칸
+    # --- KPI cards (unchanged visual) ---
     c1, c2 = st.columns(2)
     with c1:
         st.markdown(
@@ -128,7 +138,10 @@ def render_population_box(pop_sel: pd.DataFrame, *, df_pop_all: pd.DataFrame, bo
     with c2:
         floating_value_txt = "N/A"
         if float_col and float_col in df_s.columns and df_s[float_col].notna().any():
-            floating_value_txt = f"{int(round(float(df_s[float_col].sum()))):,}명"
+            try:
+                floating_value_txt = f"{int(round(float(df_s[float_col].sum()))):,}명"
+            except Exception as e:
+                st.warning("DBG: floating sum 실패"); st.exception(e)
         st.markdown(
             f"""
             <div style="text-align:center;">
@@ -138,31 +151,60 @@ def render_population_box(pop_sel: pd.DataFrame, *, df_pop_all: pd.DataFrame, bo
             """, unsafe_allow_html=True
         )
 
-    # Bar data + 안전 도메인
-    bar_h = 170
-    if isinstance(avg_total, (int, float)) and pd.notna(avg_total) and avg_total > 0:
-        bar_df = pd.DataFrame({"항목": ["해당 지역", "10개 평균"], "값": [float(region_total), float(avg_total)]})
-        x_max = max(float(region_total), float(avg_total)) * 1.1
-    else:
-        bar_df = pd.DataFrame({"항목": ["해당 지역"], "값": [float(region_total)]})
-        x_max = float(region_total) * 1.1 if region_total > 0 else 1.0
+    # --- Build bar data with ASCII headers to avoid Vega expr issues ---
+    try:
+        if isinstance(avg_total, (int, float)) and pd.notna(avg_total) and avg_total > 0:
+            bar_df = pd.DataFrame({"label": ["해당 지역", "10개 평균"], "value": [float(region_total), float(avg_total)]})
+            x_max = max(float(region_total), float(avg_total))
+        else:
+            bar_df = pd.DataFrame({"label": ["해당 지역"], "value": [float(region_total)]})
+            x_max = float(region_total)
 
-    if not bar_df["값"].notna().any():
-        st.info("표시할 유효한 값이 없습니다."); return
+        # Safety clamps for domain
+        if not np.isfinite(x_max) or x_max <= 0:
+            x_max = 1.0
+        else:
+            x_max *= 1.1
 
-    chart = (
-        alt.Chart(bar_df)
-        .mark_bar()
-        .encode(
-            y=alt.Y("항목:N", title=None, axis=alt.Axis(labels=True, ticks=False)),
-            x=alt.X("값:Q", title=None, axis=alt.Axis(format="~,"), scale=alt.Scale(domain=[0, x_max], nice=False)),
-            color=alt.condition(alt.datum['항목'] == "해당 지역", alt.value(COLOR_BLUE), alt.value(COLOR_GRAY)),
-            tooltip=[alt.Tooltip("항목:N", title="구분"), alt.Tooltip("값:Q", title="유권자수", format=",.0f")],
+        # Precompute color field (no alt.condition / no alt.datum)
+        color_map = {"해당 지역": COLOR_BLUE, "10개 평균": COLOR_GRAY}
+        bar_df["color"] = bar_df["label"].map(lambda x: color_map.get(x, COLOR_GRAY))
+
+        # Debug pins
+        st.markdown("<!-- DBG: bar_df built -->", unsafe_allow_html=True)
+        st.write({"bar_df_head": bar_df.head(3), "dtypes": bar_df.dtypes.to_dict(), "x_max": x_max})
+    except Exception as e:
+        st.error("DBG: bar_df 구성 실패"); st.exception(e); return
+
+    # --- Altair chart (ASCII fields only) ---
+    try:
+        import altair as alt
+        chart = (
+            alt.Chart(bar_df)
+            .mark_bar()
+            .encode(
+                y=alt.Y("label:N", title=None, axis=alt.Axis(labels=True, ticks=False)),
+                x=alt.X("value:Q", title=None, axis=alt.Axis(format="~,"), scale=alt.Scale(domain=[0, x_max], nice=False)),
+                color=alt.Color("color:N", scale=None, legend=None),
+                tooltip=[alt.Tooltip("label:N", title="구분"), alt.Tooltip("value:Q", title="유권자수", format=",.0f")],
+            )
+            .properties(height=170, padding={"left":0, "right":0, "top":4, "bottom":2})
+            .configure_view(stroke=None)
         )
-        .properties(height=bar_h, padding={"left":0, "right":0, "top":4, "bottom":2})
-        .configure_view(stroke=None)
-    )
-    st.altair_chart(chart, use_container_width=True, theme=None)
+        # Optional: spec sanity
+        _ = chart.to_dict()
+        st.markdown("<!-- DBG: altair spec ok -->", unsafe_allow_html=True)
+        st.altair_chart(chart, use_container_width=True, theme=None)
+        st.markdown("<!-- DBG: altair rendered -->", unsafe_allow_html=True)
+    except Exception as e:
+        st.error("DBG: Altair 렌더 실패 → st.bar_chart 폴백 시도")
+        st.exception(e)
+        try:
+            tmp = bar_df.set_index("label")["value"]
+            st.bar_chart(tmp)
+            st.info("DBG: 폴백(st.bar_chart) 출력 성공")
+        except Exception as ee:
+            st.error("DBG: 폴백도 실패"); st.exception(ee)
 
 # =========================================================
 # Age Composition (Half donut)
@@ -753,6 +795,7 @@ def render_region_detail_layout(
             render_incumbent_card(df_cur_sel)
         with c3.container(height="stretch"):
             render_prg_party_box(df_idx_sel, df_idx_all=df_idx_all)
+
 
 
 
