@@ -556,7 +556,7 @@ def render_incumbent_card(cur_sel: pd.DataFrame | None):
           </div>
           <ul style="margin:0; padding-left:1.1rem; color:#374151;">
             <li>선수: {term}</li><li>성별: {gender}</li><li>연령: {age}</li>
-            {"<li>최근 경력</li><ul style='margin:.2rem 0 0 0.3rem;'>"+items_html+"</ul>" if items_html else ""}
+            {"<li>최근 경력</li><ul style='margin:.2rem 0 0 0.1rem;'>"+items_html+"</ul>" if items_html else ""}
           </ul>
         </div>
         """
@@ -690,5 +690,6 @@ def render_region_detail_layout(
             render_incumbent_card(df_cur_sel)
         with c3.container(height="stretch"):
             render_prg_party_box(df_idx_sel, df_idx_all=df_idx_all)
+
 
 
