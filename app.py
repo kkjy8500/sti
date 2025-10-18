@@ -19,7 +19,7 @@ from data_loader import (
     load_vote_trend,          # vote_trend.csv
     load_results_2024,        # 5_na_dis_results.csv
     load_current_info,        # current_info.csv
-    load_index_sample,        # index_sample1012.csv (optional)
+    load_index_sample,        # index_sample.csv
 )
 
 from charts import (
