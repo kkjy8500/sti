@@ -41,7 +41,7 @@ def _to_num(x):
     except: return 0.0
 
 def _fmt_pct(x):
-    return f"{x:.1f}%" if isinstance(x, (int, float)) else "N/A"
+    return f"{x:.2f}%" if isinstance(x, (int, float)) else "N/A"
 
 def _col(df: pd.DataFrame, bookmark_map: dict | None, std_key: str, candidates: list[str], required: bool = True) -> str | None:
     """
@@ -201,13 +201,13 @@ def render_age_highlight_chart(pop_sel: pd.DataFrame, *, bookmark_map: dict | No
             color=alt.Color("강조:N", scale=alt.Scale(domain=[True, False], range=["#1E6BFF", "#E5E7EB"]), legend=None),
             tooltip=[alt.Tooltip("연령:N", title="연령대"),
                      alt.Tooltip("명:Q", title="인원", format=",.0f"),
-                     alt.Tooltip("표시비율:Q", title="비율(%)", format=".1f")],
+                     alt.Tooltip("표시비율:Q", title="비율(%)", format=".2f")],
         )
     )
 
     label_map = {Y: "청년층(18~39세)", M: "중년층(40~59세)", O: "고령층(65세 이상)"}
     idx = labels_order.index(focus)
-    pct_txt = f"{(ratios100[idx]):.1f}%"
+    pct_txt = f"{(ratios100[idx]):.2f}%"
 
     NUM_FONT, LBL_FONT = 28, 14
     TXT_NUM_Y = outer_r + 30
@@ -381,7 +381,7 @@ def render_vote_trend_chart(ts_sel: pd.DataFrame, ts_all: pd.DataFrame | None = 
             detail="계열:N",
             tooltip=[alt.Tooltip("선거명_표시:N", title="선거명"),
                      alt.Tooltip("계열:N", title="계열"),
-                     alt.Tooltip("득표율:Q", title="득표율(%)", format=".1f")]
+                     alt.Tooltip("득표율:Q", title="득표율(%)", format=".2f")]
         ).transform_filter(sel)
 
         zoomX = alt.selection_interval(bind='scales', encodings=['x'])
@@ -479,7 +479,7 @@ def render_results_2024_card(res_sel: pd.DataFrame | None, *, df_24_all: pd.Data
 
         p1, cand1 = split(name1)
         p2, cand2 = split(name2)
-        gap_txt = f"{gap:.1f} %p" if isinstance(gap,(int,float)) else "N/A"
+        gap_txt = f"{gap:.2f} %p" if isinstance(gap,(int,float)) else "N/A"
 
         html = f"""
         <div style="display:grid; grid-template-columns: 1fr 1fr; align-items:center; gap:0; padding:12px 8px 4px 8px;">
@@ -556,7 +556,7 @@ def render_incumbent_card(cur_sel: pd.DataFrame | None):
           </div>
           <ul style="margin:0; padding-left:1.1rem; color:#374151;">
             <li>선수: {term}</li><li>성별: {gender}</li><li>연령: {age}</li>
-            {"<li>최근 경력</li><ul style='margin:.2rem 0 0 0.8rem;'>"+items_html+"</ul>" if items_html else ""}
+            {"<li>최근 경력</li><ul style='margin:.2rem 0 0 0.3rem;'>"+items_html+"</ul>" if items_html else ""}
           </ul>
         </div>
         """
@@ -690,4 +690,5 @@ def render_region_detail_layout(
             render_incumbent_card(df_cur_sel)
         with c3.container(height="stretch"):
             render_prg_party_box(df_idx_sel, df_idx_all=df_idx_all)
+
 
