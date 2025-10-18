@@ -90,8 +90,8 @@ def render_population_box(pop_sel: pd.DataFrame, *, df_pop_all: pd.DataFrame, bo
     df_s = _norm_cols(pop_sel.copy())
     df_a = _norm_cols(df_pop_all.copy()) if df_pop_all is not None else pd.DataFrame()
 
-    COLOR_BLUE = "#1E6BFF"
-    COLOR_GRAY = "#9CA3AF"
+    COLOR_BLUE = "#3498DB"
+    COLOR_GRAY = "#95A5A6"
 
     total_col = _col(df_s, bookmark_map, "total_voters", ["전체 유권자 수","전체 유권자","전체유권자","total_voters"])
     float_col = _col(df_s, bookmark_map, "floating", ["유동인구","전입전출","전입+전출","유출입","floating_pop"], required=False)
@@ -157,32 +157,77 @@ def render_population_box(pop_sel: pd.DataFrame, *, df_pop_all: pd.DataFrame, bo
 # - Change donut size: tweak inner_r/outer_r.
 # - Change label positions: change TXT_NUM_Y / TXT_LBL_Y.
 # =========================================================
+# =========================================================
+# Age Composition (Half donut)
+# HOW TO CHANGE LATER:
+# - Change donut size: tweak inner_r/outer_r.
+# - Change label positions: change TXT_NUM_Y / TXT_LBL_Y.
+# =========================================================
 def render_age_highlight_chart(pop_sel: pd.DataFrame, *, bookmark_map: dict | None = None, box_height_px: int = 240):
     df = _norm_cols(pop_sel.copy()) if pop_sel is not None else pd.DataFrame()
-    if df.empty: st.info("연령 구성 데이터가 없습니다."); return
+    if df.empty:
+        st.info("연령 구성 데이터가 없습니다.")
+        return
 
     Y, M, O = "청년층(18~39세)", "중년층(40~59세)", "고령층(65세 이상)"
-    total_col = _col(df, bookmark_map, "total_voters", ["전체 유권자 수","전체 유권자","전체유권자","total_voters"])
+
+    # --- total_voters 감지 (bookmark 우선) ---
+    total_col = None
+    try:
+        total_col = _col(
+            df, bookmark_map, "total_voters",
+            ["전체 유권자", "전체 유권자 수", "전체유권자", "전체 유권자수", "전체유권자수", "유권자수", "선거인수", "total_voters"],
+            required=False
+        )
+    except Exception:
+        total_col = None
+
+    # --- 연령대 컬럼 존재 확인 ---
     for c in (Y, M, O):
         if c not in df.columns:
-            st.info(f"연령대 컬럼이 없습니다: {c}"); return
+            st.info(f"연령대 컬럼이 없습니다: {c}")
+            return
 
-    for c in [Y, M, O, total_col]:
-        df[c] = pd.to_numeric(df[c].astype(str).replace(",","", regex=False).str.strip(), errors="coerce").fillna(0)
+    # --- 숫자 파서(핵심): '명' 등 비숫자 제거 후 float 변환 ---
+    def _to_num_strict(v) -> float:
+        s = str(v)
+        s = re.sub(r"[^\d\.\-]", "", s)  # 숫자/점/마이너스만 남김
+        if s in ("", ".", "-", "-.", ".-"):
+            return 0.0
+        try:
+            return float(s)
+        except Exception:
+            return 0.0
+
+    # 연령대 + 전체유권자(있다면) 숫자화
+    cols_to_cast = [Y, M, O] + ([total_col] if total_col else [])
+    for c in cols_to_cast:
+        df[c] = df[c].apply(_to_num_strict).fillna(0.0)
 
     y, m, o = float(df[Y].sum()), float(df[M].sum()), float(df[O].sum())
-    tot = float(df[total_col].sum())
-    if tot <= 0: st.info("전체 유권자 수(분모)가 0입니다."); return
 
+    # --- 분모 계산: 우선 total_col 합계, 없거나 0이면 연령합으로 대체 ---
+    tot = float(df[total_col].sum()) if total_col else 0.0
+    if tot <= 0:
+        tot = y + m + o
+        st.caption("ℹ️ '전체 유권자'가 0으로 파싱되어 연령 합계(청+중+고)로 분모를 대체했습니다.")
+
+    if tot <= 0:
+        st.info("전체 유권자 수(분모)가 0입니다.")
+        return
+
+    # 60–64세 잔여
     mid_60_64 = max(0.0, tot - (y + m + o))
     labels_order = [Y, M, "60–64세", O]
     values = [y, m, mid_60_64, o]
     ratios01  = [v/tot for v in values]
     ratios100 = [r*100 for r in ratios01]
 
+    # 포커스(청/중/고만)
     focus = st.radio("강조", [Y, M, O], index=0, horizontal=True, label_visibility="collapsed")
     st.markdown("<div style='height: 6px;'></div>", unsafe_allow_html=True)
 
+    # 도넛 크기
     inner_r, outer_r = 68, 106
     W = 320
     H = max(220, int(box_height_px))
@@ -199,9 +244,11 @@ def render_age_highlight_chart(pop_sel: pd.DataFrame, *, bookmark_map: dict | No
             theta=alt.Theta("비율:Q", stack=True, sort=None, scale=alt.Scale(range=[-math.pi/2, math.pi/2])),
             order=alt.Order("순서:Q"),
             color=alt.Color("강조:N", scale=alt.Scale(domain=[True, False], range=["#1E6BFF", "#E5E7EB"]), legend=None),
-            tooltip=[alt.Tooltip("연령:N", title="연령대"),
-                     alt.Tooltip("명:Q", title="인원", format=",.0f"),
-                     alt.Tooltip("표시비율:Q", title="비율(%)", format=".2f")],
+            tooltip=[
+                alt.Tooltip("연령:N", title="연령대"),
+                alt.Tooltip("명:Q", title="인원", format=",.0f"),
+                alt.Tooltip("표시비율:Q", title="비율(%)", format=".2f"),
+            ],
         )
     )
 
@@ -271,7 +318,10 @@ def render_sex_ratio_bar(pop_sel: pd.DataFrame, *, bookmark_map: dict | None = N
         .encode(
             y=alt.Y("연령대표시:N", sort=[label_map[a] for a in age_buckets], title=None),
             x=alt.X("전체비중:Q", scale=alt.Scale(domain=[0, 0.30]), axis=alt.Axis(format=".0%", title="전체 기준 구성비(%)", grid=True)),
-            color=alt.Color("성별:N", scale=alt.Scale(domain=["남성","여성"]), legend=alt.Legend(title=None, orient="top")),
+            color=alt.Color("성별:N", 
+                            scale=alt.Scale(domain=["남성","여성"], 
+                                            range=["#5DADE2", "#85C1E9"]), # 남성 -> #5DADE2, 여성 -> #85C1E9 적용
+                            legend=alt.Legend(title=None, orient="top")),
             tooltip=[
                 alt.Tooltip("연령대표시:N", title="연령대"),
                 alt.Tooltip("성별:N", title="성별"),
@@ -690,6 +740,7 @@ def render_region_detail_layout(
             render_incumbent_card(df_cur_sel)
         with c3.container(height="stretch"):
             render_prg_party_box(df_idx_sel, df_idx_all=df_idx_all)
+
 
 
 
