@@ -217,7 +217,7 @@ if menu == "종합":
     st.caption("에스티아이")
 
     # --- Load data
-    CSV_PATH = Path("/mnt/data/scoring.csv")  # your uploaded file lives here
+    CSV_PATH = Path("/sti/data/scoring.csv")  # your uploaded file lives here
     df = pd.read_csv(CSV_PATH)
     
     # --- Ensure numeric dtypes for score columns
