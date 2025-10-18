@@ -198,37 +198,48 @@ with st.spinner("데이터 불러오는 중..."):
 # Page: 종합
 # --------------------------------
 if menu == "종합":
-    st.title("🗳️ 지역별 스코어 표 (막대 포함)")
+    st.title("🗳️ 지역구 선정 1단계 조사 결과")
 
-    # How to change later:
-    # - Change CSV path/encoding: edit the read_csv line below.
-    # - To change bar colors or max scaling, move to charts? (kept simple here.)
-
-    csv_path = Path("data/scoring.csv")  # simplified (Req #2)
+    csv_path = Path("data/scoring.csv")
     if not csv_path.exists():
-        st.error("`data/scoring.csv`를 찾을 수 없습니다. (경로 고정)"); st.stop()
+        st.error("`data/scoring.csv`를 찾을 수 없습니다. (경로 고정)")
+        st.stop()
 
+    # --- Load CSV (utf-8-sig 우선, tsv fallback) ---
     try:
         df = pd.read_csv(csv_path, encoding="utf-8-sig")
     except Exception as e:
-        st.error(f"`data/scoring.csv` 읽기 실패: {e}"); st.stop()
+        st.error(f"`data/scoring.csv` 읽기 실패: {e}")
+        st.stop()
 
-    if df.shape[1] == 1:
-        # If accidental TSV, force tab parsing once
+    if df.shape[1] == 1:  # TSV fallback
         try:
             df = pd.read_csv(csv_path, encoding="utf-8-sig", sep="\t")
         except Exception as e:
-            st.error(f"`data/scoring.csv` 구분자 문제: {e}"); st.stop()
+            st.error(f"`data/scoring.csv` 구분자 문제: {e}")
+            st.stop()
 
+    # --- Always treat first column as region ---
+    df = _normalize_columns(df)
+    df.rename(columns={df.columns[0]: "region"}, inplace=True)
     label_col = "region"
+
+    # --- Detect numeric columns (all except first) ---
     score_cols = [c for c in df.columns if c != label_col]
     df[score_cols] = df[score_cols].apply(pd.to_numeric, errors="coerce")
 
-    bar_colors = {"합계": "#2563EB", "유권자환경": "#059669", "정치지형": "#F59E0B", "주체역량": "#DC2626", "상대역량": "#7C3AED"}
+    # --- Colors & scaling ---
+    bar_colors = {
+        "합계": "#2563EB",
+        "유권자환경": "#059669",
+        "정치지형": "#F59E0B",
+        "주체역량": "#DC2626",
+        "상대역량": "#7C3AED",
+    }
     vmax = {c: (float(df[c].max()) if df[c].notna().any() else 0.0) for c in score_cols}
 
+    # --- HTML bar cell ---
     def _bar_cell(val, col):
-        # How to change later: change bar height (18px) or track color (#F3F4F6)
         try:
             v = float(val)
         except Exception:
@@ -244,8 +255,11 @@ if menu == "종합":
             f'</div>'
         )
 
+    # --- Build HTML table ---
     headers = [label_col] + score_cols
-    thead = "".join([f"<th style='text-align:left;padding:6px 8px;white-space:nowrap;'>{h}</th>" for h in headers])
+    thead = "".join(
+        [f"<th style='text-align:left;padding:6px 8px;white-space:nowrap;'>{h}</th>" for h in headers]
+    )
 
     rows_html = []
     for _, row in df.iterrows():
@@ -262,6 +276,7 @@ if menu == "종합":
         "</table>"
         "</div>"
     )
+
     st.markdown(table_html, unsafe_allow_html=True)
 
 # --------------------------------
