@@ -216,37 +216,49 @@ if menu == "종합":
     st.title("🗳️ 지역구 선정 1단계 조사 결과")
     st.caption("에스티아이")
 
-    c1, c2, c3 = st.columns(3)
-    with c1:
-        n_regions = 0
-        if "코드" in df_trend.columns and len(df_trend) > 0:
-            n_regions = df_trend["코드"].astype(str).map(_canon_code).nunique()
-        elif "코드" in df_pop.columns and len(df_pop) > 0:
-            n_regions = df_pop["코드"].astype(str).map(_canon_code).nunique()
-        st.metric("지역 수", f"{n_regions:,}")
-    with c2:
-        st.metric("데이터 소스(표) 수", f"{sum([len(x) > 0 for x in [df_pop, df_24, df_curr, df_trend, df_party, df_idx]])}/6")
-    with c3:
-        st.metric("최근 파일 로드 상태", "OK" if any(len(x) > 0 for x in [df_pop, df_24, df_curr, df_trend]) else "확인 필요")
-
-    st.divider()
-    base_for_sido = _first_nonempty(df_pop, df_trend, df_24, df_curr)
-    if base_for_sido is not None:
-        base_for_sido = _normalize_columns(base_for_sido)
-        base_for_sido = ensure_code_col(base_for_sido)
-        sido_col = _detect_col(base_for_sido, SIDO_CANDIDATES)
-        if sido_col:
-            st.subheader("시/도별 지역구 개수")
-            vc = (
-                base_for_sido[[sido_col, "코드"]]
-                .dropna(subset=[sido_col, "코드"])
-                .assign(코드=base_for_sido["코드"].astype(str).map(_canon_code))
-                .groupby(sido_col)["코드"].nunique()
-                .sort_values(ascending=False)
-                .rename("지역구수")
-                .to_frame()
-            )
-            st.dataframe(vc)
+    # --- Load data
+    CSV_PATH = Path("/mnt/data/scoring.csv")  # your uploaded file lives here
+    df = pd.read_csv(CSV_PATH)
+    
+    # --- Ensure numeric dtypes for score columns
+    label_col = "region"
+    score_cols = [c for c in df.columns if c != label_col]
+    df[score_cols] = df[score_cols].apply(pd.to_numeric, errors="coerce")
+    
+    # --- Per-column bar colors (edit as you like)
+    bar_colors = {
+        "합계": "#2563EB",       # blue
+        "유권자환경": "#059669",  # emerald/green
+        "정치지형": "#F59E0B",   # amber
+        "주체역량": "#DC2626",   # red
+        "상대역량": "#7C3AED",   # violet
+    }
+    
+    # --- Build Streamlit column configs with in-cell bars
+    # Tip: ProgressColumn draws a left-aligned horizontal bar sized by the value.
+    col_config = {
+        label_col: st.column_config.TextColumn("region", help="선정 지역명"),
+    }
+    for col in score_cols:
+        # Choose sensible min/max: start from 0, cap at observed max
+        col_min = 0.0
+        col_max = float(pd.to_numeric(df[col], errors="coerce").max())
+        col_config[col] = st.column_config.ProgressColumn(
+            col,
+            help=f"{col} 점수 (bar-in-cell)",
+            min_value=col_min,
+            max_value=col_max,
+            format="%.1f",
+            color=bar_colors.get(col, "#4B5563"),  # fallback gray
+        )
+    
+    st.subheader("지역별 스코어 표 (막대 포함)")
+    st.dataframe(
+        df,
+        column_config=col_config,
+        hide_index=True,
+        use_container_width=True,
+    )
 
 # -----------------------------
 # Page: 지역별 분석
