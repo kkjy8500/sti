@@ -117,29 +117,41 @@ def render_population_box(pop_sel: pd.DataFrame, *, df_pop_all: pd.DataFrame, bo
 
     # --- Compute average total (district-level mean) ---
     avg_total = None
-    if not df_a.empty and (total_col in df_a.columns):
-        # 1) 숫자화
-        a_vals = pd.to_numeric(df_a[total_col].apply(_to_num), errors="coerce")
-    
-        # 2) 지역(구) 식별 키 시도: bookmark_map 또는 흔한 키 이름들
-        region_key = _col(
-            df_a, bookmark_map, "region_code",
-            ["선거구코드","지역코드","구코드","code","region_code","region","선거구","지역","자치구","구"]
+    if not df_a.empty:
+        # (A) total voters column in df_pop_all: try bookmark/candidates; fall back to df_s's name if shared
+        a_total_col = _col(
+            df_a, bookmark_map, "total_voters",
+            ["전체 유권자 수","전체 유권자","전체유권자","total_voters"],
+            required=False
         )
-        # 3) region_key가 있으면 "구별 합계의 평균", 없으면 행 평균 유지
-        if region_key and region_key in df_a.columns:
-            # 구별 합계 → 그 평균
-            grp = (
-                df_a[[region_key, total_col]]
-                .assign(**{total_col: a_vals})
-                .groupby(region_key, dropna=False)[total_col]
-                .sum(min_count=1)
+        if (not a_total_col) and (total_col in df_a.columns):
+            a_total_col = total_col
+    
+        if a_total_col and (a_total_col in df_a.columns):
+            # numeric cast
+            a_vals = pd.to_numeric(df_a[a_total_col].apply(_to_num), errors="coerce")
+    
+            # (B) optional region key; if missing, fall back to simple row-mean
+            region_key = _col(
+                df_a, bookmark_map, "region_code",
+                ["선거구코드","지역코드","구코드","code","region_code","region","선거구","지역","자치구","구"],
+                required=False   # <-- was True; this caused the ValueError
             )
-            # 10개 지역만 평균내고 싶다면, 여기서 대상 10개 region만 필터해도 됨.
-            avg_total = float(grp.mean(skipna=True)) if grp.notna().any() else None
+    
+            if region_key and (region_key in df_a.columns):
+                grp = (
+                    df_a[[region_key, a_total_col]]
+                    .assign(**{a_total_col: a_vals})
+                    .groupby(region_key, dropna=False)[a_total_col]
+                    .sum(min_count=1)
+                )
+                avg_total = float(grp.mean(skipna=True)) if grp.notna().any() else None
+            else:
+                # no region key → simple mean across rows
+                avg_total = float(a_vals.mean(skipna=True)) if a_vals.notna().any() else None
         else:
-            # 지역 키 없으면 기존 행 평균(폴백)
-            avg_total = float(a_vals.mean(skipna=True)) if a_vals.notna().any() else None
+            # df_pop_all에 total voters 열 자체가 없으면 평균 생략
+            avg_total = None
     
     # --- KPI cards (unchanged visual) ---
     c1, c2 = st.columns(2)
@@ -815,6 +827,7 @@ def render_region_detail_layout(
             render_incumbent_card(df_cur_sel)
         with c3.container(height="stretch"):
             render_prg_party_box(df_idx_sel, df_idx_all=df_idx_all)
+
 
 
 
