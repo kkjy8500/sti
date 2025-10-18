@@ -31,6 +31,36 @@ from charts import (
     render_region_detail_layout,
 )
 
+# ===== Add these small cached helpers =====
+@st.cache_data(show_spinner=False)
+def _read_scoring_cached(path_str: str) -> pd.DataFrame:
+    """How to change later: if your scoring file is TSV, set sep='\\t' directly below."""
+    p = Path(path_str)
+    if not p.exists():
+        return pd.DataFrame()
+    try:
+        df = pd.read_csv(p, encoding="utf-8-sig")
+        if df.shape[1] == 1:  # possible TSV
+            df = pd.read_csv(p, encoding="utf-8-sig", sep="\t")
+        return df
+    except Exception:
+        return pd.DataFrame()
+
+@st.cache_data(show_spinner=False)
+def _read_markdown_cached(path_str: str) -> str | None:
+    p = Path(path_str)
+    if not p.exists():
+        return None
+    try:
+        return p.read_text(encoding="utf-8-sig")
+    except Exception:
+        try:
+            return p.read_text(encoding="utf-8")
+        except Exception:
+            return None
+# ===== end helpers =====
+
+
 # --------------------------------
 # Page Config
 # --------------------------------
