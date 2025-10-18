@@ -115,16 +115,32 @@ def render_population_box(pop_sel: pd.DataFrame, *, df_pop_all: pd.DataFrame, bo
     # --- Compute region total ---
     region_total = float(df_s[total_col].sum(skipna=True)) if df_s[total_col].notna().any() else 0.0
 
-    # --- Compute average total (simple mean) ---
+    # --- Compute average total (district-level mean) ---
     avg_total = None
     if not df_a.empty and (total_col in df_a.columns):
-        try:
-            s = pd.to_numeric(df_a[total_col].apply(_to_num), errors="coerce")
-            avg = s.mean(skipna=True)
-            avg_total = float(avg) if pd.notna(avg) else None
-        except Exception as e:
-            st.warning("DBG: avg_total 계산 실패"); st.exception(e)
-
+        # 1) 숫자화
+        a_vals = pd.to_numeric(df_a[total_col].apply(_to_num), errors="coerce")
+    
+        # 2) 지역(구) 식별 키 시도: bookmark_map 또는 흔한 키 이름들
+        region_key = _col(
+            df_a, bookmark_map, "region_code",
+            ["선거구코드","지역코드","구코드","code","region_code","region","선거구","지역","자치구","구"]
+        )
+        # 3) region_key가 있으면 "구별 합계의 평균", 없으면 행 평균 유지
+        if region_key and region_key in df_a.columns:
+            # 구별 합계 → 그 평균
+            grp = (
+                df_a[[region_key, total_col]]
+                .assign(**{total_col: a_vals})
+                .groupby(region_key, dropna=False)[total_col]
+                .sum(min_count=1)
+            )
+            # 10개 지역만 평균내고 싶다면, 여기서 대상 10개 region만 필터해도 됨.
+            avg_total = float(grp.mean(skipna=True)) if grp.notna().any() else None
+        else:
+            # 지역 키 없으면 기존 행 평균(폴백)
+            avg_total = float(a_vals.mean(skipna=True)) if a_vals.notna().any() else None
+    
     # --- KPI cards (unchanged visual) ---
     c1, c2 = st.columns(2)
     with c1:
@@ -313,21 +329,24 @@ def render_age_highlight_chart(pop_sel: pd.DataFrame, *, bookmark_map: dict | No
     pct_txt = f"{(ratios100[idx]):.2f}%"
 
     NUM_FONT, LBL_FONT = 28, 14
-    TXT_NUM_Y = outer_r + 30
-    TXT_LBL_Y = outer_r + 54
-
+    center_y = H / 2  # anchor near donut center so labels never clip
+    
     num_text = (
         alt.Chart(pd.DataFrame({"t":[pct_txt]}), width=W, height=H)
         .mark_text(fontWeight="bold", fontSize=NUM_FONT, color="#0f172a")
-        .encode(text="t:N", x=alt.value(W/2), y=alt.value(TXT_NUM_Y))
+        .encode(text="t:N", x=alt.value(W/2), y=alt.value(center_y + 2))  # keep very close to the center
     )
+    
     lbl_text = (
         alt.Chart(pd.DataFrame({"t":[label_map.get(focus, focus)]}), width=W, height=H)
-        .mark_text(fontSize=LBL_FONT, color="#475569")
-        .encode(text="t:N", x=alt.value(W/2), y=alt.value(TXT_LBL_Y))
+        .mark_text(fontSize=LBL_FONT, color="#475569", baseline="top")  # baseline ensures label sits below number
+        .encode(text="t:N", x=alt.value(W/2), y=alt.value(center_y + 28))  # stable offset below the number
     )
-
-    st.altair_chart((base + num_text + lbl_text).configure_view(stroke=None), use_container_width=True, theme=None)
+    
+    st.altair_chart(
+        (base + num_text + lbl_text).properties(autosize=alt.AutoSizeParams(type="pad")).configure_view(stroke=None),
+        use_container_width=True, theme=None
+    )
 
 # =========================================================
 # Sex ratio by age – horizontal bars
@@ -796,6 +815,7 @@ def render_region_detail_layout(
             render_incumbent_card(df_cur_sel)
         with c3.container(height="stretch"):
             render_prg_party_box(df_idx_sel, df_idx_all=df_idx_all)
+
 
 
 
