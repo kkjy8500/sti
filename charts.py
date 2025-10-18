@@ -115,43 +115,64 @@ def render_population_box(pop_sel: pd.DataFrame, *, df_pop_all: pd.DataFrame, bo
     # --- Compute region total ---
     region_total = float(df_s[total_col].sum(skipna=True)) if df_s[total_col].notna().any() else 0.0
 
-    # --- Compute average total (district-level mean) ---
+    # --- Compute average total (10-region mean after grouping by region_code) ---
     avg_total = None
     if not df_a.empty:
-        # (A) total voters column in df_pop_all: try bookmark/candidates; fall back to df_s's name if shared
+        # 0) resolve columns in both dfs
         a_total_col = _col(
             df_a, bookmark_map, "total_voters",
-            ["전체 유권자 수","전체 유권자","전체유권자","total_voters"],
+            ["전체 유권자 수","전체 유권자","전체유권자","유권자수","선거인수","total_voters"],
             required=False
         )
         if (not a_total_col) and (total_col in df_a.columns):
-            a_total_col = total_col
+            a_total_col = total_col  # reuse name if shared
     
-        if a_total_col and (a_total_col in df_a.columns):
-            # numeric cast
+        region_key_all = _col(
+            df_a, bookmark_map, "region_code",
+            ["지역구코드","선거구코드","지역코드","구코드","code","region_code","region_id","지역구ID","선거구ID"],
+            required=False
+        )
+        region_key_sel = _col(
+            df_s, bookmark_map, "region_code",
+            ["지역구코드","선거구코드","지역코드","구코드","code","region_code","region_id","지역구ID","선거구ID"],
+            required=False
+        )
+    
+        # 1) sanity: 필요 열 없으면 평균 생략(단일 막대만 표시됨)
+        if (a_total_col is None) or (region_key_all is None) or (region_key_sel is None):
+            st.caption("ℹ️ 평균 계산을 위해 필요한 컬럼(총유권자/지역구코드)을 찾지 못해 '해당 지역' 단일 막대만 표시합니다.")
+            avg_total = None
+        else:
+            # 2) 숫자화
             a_vals = pd.to_numeric(df_a[a_total_col].apply(_to_num), errors="coerce")
     
-            # (B) optional region key; if missing, fall back to simple row-mean
-            region_key = _col(
-                df_a, bookmark_map, "region_code",
-                ["선거구코드","지역코드","구코드","code","region_code","region","선거구","지역","자치구","구"],
-                required=False   # <-- was True; this caused the ValueError
+            # 3) 선택된 10개 지역의 '지역구코드' 추출
+            target_codes = (
+                df_s[region_key_sel]
+                .dropna()
+                .astype(str)
+                .unique()
+                .tolist()
+            )
+            if not target_codes:
+                st.caption("ℹ️ 선택된 지역구코드가 비어 있습니다. 전체 그룹 평균으로 대체합니다.")
+                target_codes = None  # fallback: 전체 평균
+    
+            # 4) 지역구코드별 합계 → 대상 10개 필터 → 평균
+            g = (
+                df_a[[region_key_all, a_total_col]]
+                .assign(**{a_total_col: a_vals})
+                .groupby(region_key_all, dropna=False)[a_total_col]
+                .sum(min_count=1)
+                .dropna()
             )
     
-            if region_key and (region_key in df_a.columns):
-                grp = (
-                    df_a[[region_key, a_total_col]]
-                    .assign(**{a_total_col: a_vals})
-                    .groupby(region_key, dropna=False)[a_total_col]
-                    .sum(min_count=1)
-                )
-                avg_total = float(grp.mean(skipna=True)) if grp.notna().any() else None
-            else:
-                # no region key → simple mean across rows
-                avg_total = float(a_vals.mean(skipna=True)) if a_vals.notna().any() else None
-        else:
-            # df_pop_all에 total voters 열 자체가 없으면 평균 생략
-            avg_total = None
+            if target_codes:
+                # 문자열 기준 비교 통일
+                g.index = g.index.astype(str)
+                g = g[g.index.isin([str(x) for x in target_codes])]
+    
+            avg_total = float(g.mean()) if len(g) else None
     
     # --- KPI cards (unchanged visual) ---
     c1, c2 = st.columns(2)
@@ -827,6 +848,7 @@ def render_region_detail_layout(
             render_incumbent_card(df_cur_sel)
         with c3.container(height="stretch"):
             render_prg_party_box(df_idx_sel, df_idx_all=df_idx_all)
+
 
 
 
