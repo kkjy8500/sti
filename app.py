@@ -325,22 +325,51 @@ elif menu == "지역별 분석":
 # Page: 데이터 설명
 # --------------------------------
 elif menu == "데이터 설명":
+    # 좌: 큰 제목 / 우: 앱 제목 (오른쪽 상단 고정)
     c1, c2 = st.columns([1, 1])
     with c1:
         st.title("📘 지표별 구성 및 해설")
     with c2:
-        st.markdown(f"<div style='text-align:right;font-weight:700;font-size:1.05rem;'>🗳️ {APP_TITLE}</div>", unsafe_allow_html=True)
+        st.markdown(
+            """
+            <div style="text-align:right; font-weight:700; font-size:1.05rem;">
+                🗳️ 지역구 선정 1단계 조사 결과
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
 
+    # -----------------------------
+    # 지표별 구성 및 해설 (외부 MD 파일 렌더)
+    # -----------------------------
     st.divider()
-    md_path = Path("sti/지표별 구성 및 해설.md")  # simplified (Req #7)
-    if md_path.exists():
-        try:
-            st.markdown(md_path.read_text(encoding="utf-8-sig"))
-        except Exception:
-            st.markdown(md_path.read_text(encoding="utf-8"))
-    else:
-        st.info("`sti/지표별 구성 및 해설.md` 파일을 찾지 못했습니다.")
 
+    md_candidates = [
+        Path("sti") / "지표별 구성 및 해설.md",
+        Path("지표별 구성 및 해설.md"),
+        Path("/mnt/data/sti/지표별 구성 및 해설.md"),
+    ]
+    encodings = ["utf-8", "utf-8-sig", "cp949", "euc-kr"]
+
+    md_text = None
+    md_path_used = None
+    for p in md_candidates:
+        if p.exists():
+            for enc in encodings:
+                try:
+                    md_text = p.read_text(encoding=enc)
+                    md_path_used = p
+                    break
+                except Exception:
+                    continue
+            if md_text is not None:
+                break
+
+    if md_text:
+        st.markdown(md_text)
+    else:
+        st.info("`sti/지표별 구성 및 해설.md` 파일을 찾지 못했습니다. 경로 또는 파일명을 확인해 주세요.")
+        
 # --------------------------------
 # Footer
 # --------------------------------
