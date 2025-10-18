@@ -233,8 +233,8 @@ if menu == "종합":
         "합계": "#3498DB",
         "유권자환경": "#2ECC71",
         "정치지형": "#1ABC9C",
-        "주체역량": "#5D6D7E",
-        "상대역량": "#A569BD",
+        "주체역량": "#48C9B0",
+        "상대역량": "#76D7C4",
     }
     vmax = {c: (float(df[c].max()) if df[c].notna().any() else 0.0) for c in score_cols}
 
