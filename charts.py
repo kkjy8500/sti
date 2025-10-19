@@ -377,12 +377,14 @@ def render_age_highlight_chart(pop_sel: pd.DataFrame, *, bookmark_map: dict | No
     num_text = (
         alt.Chart(pd.DataFrame({"t":[pct_txt]}), width=W, height=H)
         .mark_text(fontWeight="bold", fontSize=NUM_FONT, color="#0f172a")
+        # Before: y=alt.value(TXT_NUM_Y)
         .encode(text="t:N", x=alt.value(W/2), y=alt.value(center_y + 2))  # keep very close to the center
     )
     
     lbl_text = (
         alt.Chart(pd.DataFrame({"t":[label_map.get(focus, focus)]}), width=W, height=H)
         .mark_text(fontSize=LBL_FONT, color="#475569", baseline="top")  # baseline ensures label sits below number
+        # Before: y=alt.value(TXT_LBL_Y)
         .encode(text="t:N", x=alt.value(W/2), y=alt.value(center_y + 28))  # stable offset below the number
     )
     
@@ -858,6 +860,7 @@ def render_region_detail_layout(
             render_incumbent_card(df_cur_sel)
         with c3.container(height="stretch"):
             render_prg_party_box(df_idx_sel, df_idx_all=df_idx_all)
+
 
 
 
