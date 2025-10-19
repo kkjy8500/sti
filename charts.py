@@ -740,39 +740,33 @@ def render_prg_party_box(prg_sel: pd.DataFrame | None, *, df_idx_all: pd.DataFra
                     vals = pd.to_numeric(df_idx_all[key_cs].astype(str).str.replace("%","", regex=False), errors="coerce")
                     avg_strength = float(vals.mean()) if vals.notna().any() else None
 
-                if strength is not None and avg_strength is not None:
-                    bar_df = pd.DataFrame({
-                        "항목": ["해당 지역", "10개 평균"],
-                        "값": [strength/100.0 if strength>1 else strength,
-                              (avg_strength/100.0 if avg_strength>1 else avg_strength)]
-                    })
-                    bar_df["색상"] = bar_df["항목"].map(lambda x: "#1E6BFF" if x == "해당 지역" else "#9CA3AF")
-            
-                    mini = (
-                        alt.Chart(bar_df)
-                        .mark_bar()
-                        .encode(
-                            x=alt.X(
-                                "값:Q",
-                                axis=alt.Axis(
-                                    title=None, 
-                                    # 축 값 0%, 2%, 4%, ..., 10% 고정
-                                    format=".0%", 
-                                    values=[v/100.0 for v in range(0, 11, 2)] 
-                                ),
-                                # 최대 축을 10% (0.1)로 고정
-                                scale=alt.Scale(domain=[0, 0.1], nice=False) 
-                            ),
-                            y=alt.Y("항목:N", title=None, sort=["해당 지역", "10개 평균"]),
-                            color=alt.Color("색상:N", scale=None, legend=None),
-                            tooltip=[alt.Tooltip("항목:N"), alt.Tooltip("값:Q", format=".2%")]
-                        )
-                        .properties(height=110, padding={"top":0,"bottom":0,"left":0,"right":0})
-                        .configure_view(stroke=None)
+            if strength is not None and avg_strength is not None:
+                bar_df = pd.DataFrame({
+                    "항목": ["해당 지역", "10개 평균"],
+                    "값": [strength/100.0 if strength>1 else strength,
+                          (avg_strength/100.0 if avg_strength>1 else avg_strength)]
+                })
+                bar_df["색상"] = bar_df["항목"].map(lambda x: "#1E6BFF" if x == "해당 지역" else "#9CA3AF")
+
+                mini = (
+                    alt.Chart(bar_df)
+                    .mark_bar()
+                    .encode(
+                        x=alt.X(
+                            "값:Q",
+                            axis=alt.Axis(title=None, format=".0%", values=[v/100 for v in range(0, 101, 2)]),
+                            scale=alt.Scale(domain=[0, float(bar_df["값"].max())*1.1], nice=False)
+                        ),
+                        y=alt.Y("항목:N", title=None, sort=["해당 지역", "10개 평균"]),
+                        color=alt.Color("색상:N", scale=None, legend=None),
+                        tooltip=[alt.Tooltip("항목:N"), alt.Tooltip("값:Q", format=".2%")]
                     )
-                    st.altair_chart(mini, use_container_width=True, theme=None)
-                except Exception:
-                    pass
+                    .properties(height=110, padding={"top":0,"bottom":0,"left":0,"right":0})
+                    .configure_view(stroke=None)
+                )
+                st.altair_chart(mini, use_container_width=True, theme=None)
+        except Exception:
+            pass
 
 # =========================================================
 # Region detail layout
