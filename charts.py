@@ -280,15 +280,6 @@ def render_population_box(
         .configure_view(stroke=None)
     )
 
-    # ---------- Optional debug dump ----------
-    if SHOW_DEBUG:
-        st.write({
-            "region_total": region_total,
-            "avg_total": avg_total,
-            "bar_df_head": bar_df.head(3),
-            "x_max": x_max
-        })
-
 # =========================================================
 # Age Composition (Half donut)
 # HOW TO CHANGE LATER:
@@ -877,6 +868,7 @@ def render_region_detail_layout(
             render_incumbent_card(df_cur_sel)
         with c3.container(height="stretch"):
             render_prg_party_box(df_idx_sel, df_idx_all=df_idx_all)
+
 
 
 
