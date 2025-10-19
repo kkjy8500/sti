@@ -748,17 +748,16 @@ def render_prg_party_box(prg_sel: pd.DataFrame | None, *, df_idx_all: pd.DataFra
                 })
                 bar_df["색상"] = bar_df["항목"].map(lambda x: "#1E6BFF" if x == "해당 지역" else "#9CA3AF")
 
-            mini = (
-                    alt.Chart(bar_df)
-                    .mark_bar()
-                    .encode(
-                        x=alt.X(
-                            "값:Q",
-                            axis=alt.Axis(title=None, format=".0%", values=[v/100 for v in range(0, 101, 2)]),
-                            # ********** 이 부분을 수정합니다. **********
-                            scale=alt.Scale(domain=[0, 0.1], nice=False) # 10% 고정
-                        ),
-                        y=alt.Y("항목:N", title=None, sort=["해당 지역", "10개 평균"]),
+                mini = (
+                    alt.Chart(bar_df)
+                    .mark_bar()
+                    .encode(
+                        x=alt.X(
+                            "값:Q",
+                            axis=alt.Axis(title=None, format=".0%", values=[v/100 for v in range(0, 101, 2)]),
+                            scale=alt.Scale(domain=[0, float(bar_df["값"].max())*1.1], nice=False)
+                        ),
+                        y=alt.Y("항목:N", title=None, sort=["해당 지역", "10개 평균"]),
                         color=alt.Color("색상:N", scale=None, legend=None),
                         tooltip=[alt.Tooltip("항목:N"), alt.Tooltip("값:Q", format=".2%")]
                     )
@@ -814,5 +813,3 @@ def render_region_detail_layout(
             render_incumbent_card(df_cur_sel)
         with c3.container(height="stretch"):
             render_prg_party_box(df_idx_sel, df_idx_all=df_idx_all)
-
-
