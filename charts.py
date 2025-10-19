@@ -245,21 +245,19 @@ def render_population_box(
     bar_df["color"] = bar_df["label"].map(lambda x: "#3498DB" if x=="해당 지역" else "#95A5A6")
     
     # --- ✅ 컨테이너 높이에 맞춰 rangeStep 동적 계산 ---
-    num_cats = max(1, bar_df.shape[0])  # 1 또는 2
-    # 상하 패딩/축 라벨 고려한 안전 여유
-    inner_h = max(40, int(box_height_px - 20))  # 오버플로 방지
-    range_step = max(26, int(inner_h / num_cats))  # 최소 두께 보장
+    num_cats   = max(1, bar_df.shape[0])
+    inner_h    = max(40, int(box_height_px - 20))
+    range_step = max(26, int(inner_h / num_cats))
     
-    # x축 domain은 자동(nice=True)로 두면 해상도/값에 따라 자연스러움
     chart = (
         alt.Chart(bar_df)
-        .mark_bar()
+        .mark_bar(size=range_step)  # ✅ 막대 두께 직접 지정
         .encode(
             y=alt.Y(
                 "label:N",
                 title=None,
                 axis=alt.Axis(labels=True, ticks=False),
-                scale=alt.Scale(range={"step": range_step}),
+                scale=alt.Scale(type="point"),  # ✅ point 스케일로 전환
             ),
             x=alt.X(
                 "value:Q",
@@ -279,6 +277,8 @@ def render_population_box(
         )
         .configure_view(stroke=None)
     )
+    
+    st.altair_chart(chart, use_container_width=True, theme=None)
 
 # =========================================================
 # Age Composition (Half donut)
@@ -868,6 +868,7 @@ def render_region_detail_layout(
             render_incumbent_card(df_cur_sel)
         with c3.container(height="stretch"):
             render_prg_party_box(df_idx_sel, df_idx_all=df_idx_all)
+
 
 
 
