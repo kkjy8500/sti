@@ -259,14 +259,13 @@ def render_population_box(
                 "label:N",
                 title=None,
                 axis=alt.Axis(labels=True, ticks=False),
-                # ✅ 여기! 카테고리 두께를 컨테이너 높이에 맞춰 자동 배분
-                scale=alt.Scale(rangeStep=range_step),
+                scale=alt.Scale(range={"step": range_step}),
             ),
             x=alt.X(
                 "value:Q",
                 title=None,
                 axis=alt.Axis(format="~,", labelBound=True),
-                scale=alt.Scale(nice=True),  # 값에 맞춰 자동 도메인
+                scale=alt.Scale(nice=True),
             ),
             color=alt.Color("color:N", scale=None, legend=None),
             tooltip=[
@@ -275,12 +274,11 @@ def render_population_box(
             ],
         )
         .properties(
-            height=box_height_px,  # ✅ 외부 박스 높이와 맞춤
+            height=box_height_px,
             padding={"left": 0, "right": 0, "top": 4, "bottom": 2},
         )
         .configure_view(stroke=None)
     )
-    st.altair_chart(chart, use_container_width=True, theme=None)
 
     # ---------- Optional debug dump ----------
     if SHOW_DEBUG:
@@ -879,6 +877,7 @@ def render_region_detail_layout(
             render_incumbent_card(df_cur_sel)
         with c3.container(height="stretch"):
             render_prg_party_box(df_idx_sel, df_idx_all=df_idx_all)
+
 
 
 
