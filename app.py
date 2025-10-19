@@ -72,7 +72,7 @@ REGION_COL_WIDTH = "150px"
 # FIXED HIGHLIGHT: List of regions that must ALWAYS be highlighted (row background)
 FIXED_HIGHLIGHT_REGIONS = ["서대문갑", "평택을", "화성을"] 
 # FIXED HIGHLIGHT: Background color for the entire row of the fixed highlight regions (Used in '결과 요약' table only)
-FIXED_HIGHLIGHT_ROW_BG = "#FFFBEB" # Very light yellow for fixed region rows
+FIXED_HIGHLIGHT_ROW_BG = "#FFF9C4" # Light yellow for fixed region rows, adjusted for better visibility
 
 # DYNAMIC HIGHLIGHT: Background color for the bar container when score is in the Top 3 
 DYNAMIC_HIGHLIGHT_CELL_BG = "#E0F2FE" # Light sky blue for top 3 scores (Bar table only)
