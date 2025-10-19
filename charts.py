@@ -239,26 +239,45 @@ def render_population_box(
     # ---------- Bar data ----------
     if isinstance(avg_total, (int, float)) and np.isfinite(avg_total) and (avg_total > 0):
         bar_df = pd.DataFrame({"label": ["해당 지역", "10개 평균"], "value": [region_total, avg_total]})
-        x_max = max(region_total, avg_total) * 1.1
     else:
-        if SHOW_DEBUG:
-            st.info("ℹ️ 평균 계산용 컬럼(총유권자/지역코드)을 못 찾아 단일 막대 표시")
         bar_df = pd.DataFrame({"label": ["해당 지역"], "value": [region_total]})
-        x_max = region_total * 1.1 if region_total > 0 else 1.0
-
+    
     bar_df["color"] = bar_df["label"].map(lambda x: "#3498DB" if x=="해당 지역" else "#95A5A6")
-
-    # ---------- Chart ----------
+    
+    # --- ✅ 컨테이너 높이에 맞춰 rangeStep 동적 계산 ---
+    num_cats = max(1, bar_df.shape[0])  # 1 또는 2
+    # 상하 패딩/축 라벨 고려한 안전 여유
+    inner_h = max(40, int(box_height_px - 20))  # 오버플로 방지
+    range_step = max(26, int(inner_h / num_cats))  # 최소 두께 보장
+    
+    # x축 domain은 자동(nice=True)로 두면 해상도/값에 따라 자연스러움
     chart = (
         alt.Chart(bar_df)
         .mark_bar()
         .encode(
-            y=alt.Y("label:N", title=None, axis=alt.Axis(labels=True, ticks=False)),
-            x=alt.X("value:Q", title=None, axis=alt.Axis(format="~,"), scale=alt.Scale(domain=[0, x_max], nice=False)),
+            y=alt.Y(
+                "label:N",
+                title=None,
+                axis=alt.Axis(labels=True, ticks=False),
+                # ✅ 여기! 카테고리 두께를 컨테이너 높이에 맞춰 자동 배분
+                scale=alt.Scale(rangeStep=range_step),
+            ),
+            x=alt.X(
+                "value:Q",
+                title=None,
+                axis=alt.Axis(format="~,", labelBound=True),
+                scale=alt.Scale(nice=True),  # 값에 맞춰 자동 도메인
+            ),
             color=alt.Color("color:N", scale=None, legend=None),
-            tooltip=[alt.Tooltip("label:N", title="구분"), alt.Tooltip("value:Q", title="유권자수", format=",.0f")],
+            tooltip=[
+                alt.Tooltip("label:N", title="구분"),
+                alt.Tooltip("value:Q", title="유권자수", format=",.0f"),
+            ],
         )
-        .properties(height=box_height_px, padding={"left":0, "right":0, "top":4, "bottom":2})
+        .properties(
+            height=box_height_px,  # ✅ 외부 박스 높이와 맞춤
+            padding={"left": 0, "right": 0, "top": 4, "bottom": 2},
+        )
         .configure_view(stroke=None)
     )
     st.altair_chart(chart, use_container_width=True, theme=None)
@@ -838,7 +857,7 @@ def render_region_detail_layout(
 
     st.markdown("### 👥 인구 정보")
     with st.container():
-        col1, col2, col3 = st.columns([1.25, 1.35, 2.85], gap="small")
+        col1, col2, col3 = st.columns([1.4, 1.5, 2.6], gap="small")
         with col1.container(border=True, height="stretch"):
             render_population_box(df_pop_sel, df_pop_all=df_pop_all, bookmark_map=bookmark_map)
         with col2.container(border=True, height="stretch"):
@@ -860,6 +879,7 @@ def render_region_detail_layout(
             render_incumbent_card(df_cur_sel)
         with c3.container(height="stretch"):
             render_prg_party_box(df_idx_sel, df_idx_all=df_idx_all)
+
 
 
 
