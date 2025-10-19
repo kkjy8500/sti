@@ -11,6 +11,7 @@ import pandas as pd
 from pathlib import Path
 import numpy as np
 
+# Data Loader Imports (Korean function names are maintained as per the original structure)
 from data_loader import (
     load_bookmark,             # bookmark.csv (optional but preferred)
     load_bookmark_map,         # -> dict, standard_key -> actual column
@@ -22,6 +23,7 @@ from data_loader import (
     load_index_sample,         # index_sample.csv
 )
 
+# Chart Renderer Imports (Korean function names are maintained as per the original structure)
 from charts import (
     render_population_box,
     render_vote_trend_chart,
@@ -31,43 +33,59 @@ from charts import (
     render_region_detail_layout,
 )
 
-# ===== Absolute Maximum Scores for Bar Chart Scaling (CRITICAL: Needs User Input) =====
-# 4. The user requested to set the bar chart max length based on an absolute max score
-#    instead of the data's max value. These are placeholder values (100.0) and MUST be 
-#    updated with the actual max scores provided by the user.
+# ====================================================================
+# ABSOLUTE SCALING CONFIGURATION (CRITICAL)
+# Columns listed here will use the specified value as the 100% max score
+# for bar length calculation. Columns NOT listed here will use the 
+# dynamic maximum value (df[col].max()) from the current dataset as the 
+# scaling reference (relative max).
+# ====================================================================
 ABSOLUTE_MAX_SCORES = {
-    # Main Scores (Using 100.0 as a temporary placeholder)
-    "합계": 100.0,
-    "유권자환경": 100.0,
-    "정치지형": 100.0,
-    "주체역량": 100.0,
-    "상대역량": 100.0,
-    # Detailed Indices (Using 100.0 as a temporary placeholder for all detailed indices)
-    # If the user specifies different max scores per detailed index, they should be added here.
+    # Main Aggregate Scores (Max 100 or 20/30)
+    "합계": 100.0,          # Total Score
+    "유권자환경": 20.0,     # Electorate Environment Score
+    "정치지형": 20.0,       # Political Landscape Score
+    "주체역량": 30.0,       # Subjective Capacity Score
+    "상대역량": 30.0,       # Opponent Capacity Score
+    
+    # Ratios/Scores with absolute max 1.0 or 10.0
+    "고령층 비율": 1.0,     # Elderly Ratio (Max 1.0)
+    "청년층 비율": 1.0,     # Youth Ratio (Max 1.0)
+    "4-50대 비율": 1.0,     # Middle-Aged Ratio (Max 1.0)
+    "2030여성 비율": 1.0,   # Young Female Ratio (Max 1.0)
+    "진보정당 득표력": 10.0, # Progressive Party Electorate Power (Max 10.0)
+    
+    # Power Scores specified by the user to be fixed at 100.0
+    "현직 득표력": 100.0,   # Incumbent Electorate Power (Max 100.0)
+    "민주당 득표력": 100.0, # Democratic Party Electorate Power (Max 100.0)
+    "보수 득표력": 100.0,   # Conservative Party Electorate Power (Max 100.0)
+    
+    # NOTE: Columns like '유권자 수' (Electorate Count) are NOT listed here, 
+    # so they will use the largest value in the current data as the 100% reference.
 }
-# Fallback Max Score if specific max is not defined for a column
-FALLBACK_MAX = 100.0 
-# ======================================================================================
+# ====================================================================
 
 # ===== Style Configurations =====
-# 2. Consistent width for the region label column
-REGION_COL_WIDTH = "150px"
-# 3. Highlight color for top 3 cells
-TOP3_HIGHLIGHT_COLOR = "#FFF9C4" # Light Gold/Yellow background
-# Colors for the main scoring bars
+# Width setting for the region label column (fixed width in px for alignment)
+REGION_COL_WIDTH = "150px" 
+
+# Border style applied to the bar container for the top 3 highest scores
+TOP3_HIGHLIGHT_BORDER_STYLE = "2px solid" 
+
+# Colors for the main scoring bars (Used in the '종합' tab)
 BAR_COLORS_MAIN = {
-    "합계": "#3498DB", # Blue
+    "합계": "#3498DB",       # Blue
     "유권자환경": "#48C9B0", # Light Cyan
-    "정치지형": "#1ABC9C", # Green
-    "주체역량": "#76D7C4", # Very Light Green
-    "상대역량": "#2ECC71", # Emerald Green
+    "정치지형": "#1ABC9C",   # Green
+    "주체역량": "#76D7C4",   # Very Light Green
+    "상대역량": "#2ECC71",   # Emerald Green
 }
-# Colors for the detailed index bars
+# Colors for the detailed index bars (Used in the '세부 지표별 상세 분석' tabs)
 BAR_COLORS_DETAIL = {
-    "유권자환경": "#00CC99", # Green
-    "정치지형": "#3498DB", # Blue
-    "주체역량": "#E74C3C", # Red
-    "상대역량": "#F39C12", # Orange
+    "유권자환경": "#00CC99", # Green for Electorate
+    "정치지형": "#3498DB", # Blue for Political
+    "주체역량": "#E74C3C", # Red for Subjective
+    "상대역량": "#F39C12", # Orange for Opponent
 }
 # ==============================
 
@@ -222,10 +240,10 @@ def build_regions(primary_df: pd.DataFrame, *fallback_dfs: pd.DataFrame, bookmar
     return out
 
 # --------------------------------
-# Core Logic for Table Rendering (Refactored to support absolute max and top 3 highlight)
+# Core Logic for Table Rendering
 # --------------------------------
 
-# 5. Helper to format numeric values based on assumed type (Count vs. Ratio/Score)
+# Helper to format numeric values (Count vs. Ratio/Score)
 def _format_value(val: float | object, col_name: str) -> str:
     """
     Formats the value: comma for counts, two decimals for scores/ratios.
@@ -238,7 +256,8 @@ def _format_value(val: float | object, col_name: str) -> str:
         return str(val)
 
     # Heuristic for Count-like data (should use comma)
-    count_names = ["유권자 수", "유동인구", "진보당 당원수"]
+    # NOTE: These columns use dynamic max scaling since they are not in ABSOLUTE_MAX_SCORES
+    count_names = ["유권자 수", "유동인구", "진보당 당원수", "진보당 지방선거 후보 수"] 
     if col_name in count_names:
         return f"{int(round(v)):,d}" # Round to nearest int and apply comma
     
@@ -247,19 +266,28 @@ def _format_value(val: float | object, col_name: str) -> str:
 
 def _bar_cell_factory(score_df: pd.DataFrame, score_cols: list[str], bar_colors: dict) -> callable:
     """
-    Generates an HTML bar cell function, incorporating absolute max scaling, top 3 highlighting,
-    and number formatting.
+    Generates an HTML bar cell function, incorporating absolute max scaling, top 3 highlighting 
+    with a border, and number formatting.
     """
     
-    # 3. Pre-calculate top 3 values for each column
+    # Pre-calculate top 3 values for each column
     top3_values = {}
     for col in score_cols:
-        # Use abs() to handle negative scores correctly if necessary, then sort descending
-        top3_values[col] = set(score_df.nlargest(3, col, keep='all')[col].tolist())
+        try:
+            # Use nlargest to find the top 3 scores
+            top3_values[col] = set(score_df.nlargest(3, col, keep='all')[col].tolist())
+        except KeyError:
+            top3_values[col] = set()
+    
+    # Pre-calculate dynamic max values for columns where ABSOLUTE_MAX_SCORES is not defined
+    dynamic_maxes = {
+        col: score_df[col].max() for col in score_cols 
+        if col not in ABSOLUTE_MAX_SCORES
+    }
     
     def _bar_cell(val, col):
         """
-        Renders a single cell with an HTML bar, absolute scaling, value formatting, and highlight.
+        Renders a single cell with an HTML bar, absolute scaling, value formatting, and highlight border.
         """
         try:
             v = float(val)
@@ -269,30 +297,38 @@ def _bar_cell_factory(score_df: pd.DataFrame, score_cols: list[str], bar_colors:
         if np.isnan(v):
              return ""
         
-        # 4. Absolute Scaling: Use ABSOLUTE_MAX_SCORES
-        max_score = ABSOLUTE_MAX_SCORES.get(col, FALLBACK_MAX)
-        max_score = max(1.0, max_score) # Ensure max_score is at least 1.0 to prevent division by zero
+        # Determine the maximum score for scaling (Absolute Max > Dynamic Max)
+        max_score = ABSOLUTE_MAX_SCORES.get(col)
+        
+        if max_score is None:
+            # Fallback: Use the dataset's max value for scaling (dynamic scaling)
+            max_score = dynamic_maxes.get(col, 1.0)
+        
+        # Ensure max_score is at least 1.0 to prevent division by zero or inflated bars
+        max_score = max(1.0, max_score) 
 
-        # Calculate percentage based on absolute max
+        # Calculate percentage based on absolute/dynamic max
         pct = max(0.0, min(100.0, (v / max_score) * 100.0))
         
-        # 3. Check for Top 3 highlight
+        # Check for Top 3 highlight (Top 3 gets a border defined by TOP3_HIGHLIGHT_BORDER_STYLE)
         is_top3 = col in top3_values and v in top3_values[col]
-        cell_style = f"padding:6px 8px; {'background:' + TOP3_HIGHLIGHT_COLOR + ';' if is_top3 else ''}"
         
-        # Determine bar color
-        color = bar_colors.get(col, "#6B7280")
+        # Determine bar color from the passed dict
+        color = bar_colors.get(col, "#6B7280") # default to gray
         
-        # 5. Format value display
+        # Top 3 Visual: Add a border to the bar container div using the group's color
+        cell_border = f"{TOP3_HIGHLIGHT_BORDER_STYLE} {color}" if is_top3 else "none"
+        
+        # Format value display (comma for counts, decimals for scores)
         formatted_value = _format_value(v, col)
 
-        # HTML Structure
+        # HTML Structure for the bar
         return (
-            f'<div style="{cell_style}">'
-            f'<div style="position:relative;width:100%;background:#F3F4F6;height:18px;border-radius:4px;overflow:hidden;min-width:50px;">'
+            f'<div style="padding:6px 8px; height:100%; box-sizing:border-box;">'
+            f'<div style="position:relative;width:100%;background:#F3F4F6;height:18px;border-radius:4px;overflow:hidden;min-width:50px; border:{cell_border}; transition: border 0.2s ease-in-out;">'
             f'  <div style="width:{pct:.2f}%;height:100%;background:{color};"></div>'
             f'  <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;'
-            f'font-size:12px;font-weight:600;color:#111827;">{formatted_value}</div>'
+            f'font-size:12px;font-weight:600;color:#111827; text-shadow: 0 0 1px #fff;">{formatted_value}</div>' # text-shadow for better contrast
             f'</div>'
             f'</div>'
         )
@@ -313,14 +349,14 @@ with st.spinner("데이터 불러오는 중..."):
     df_idx   = ensure_code_col(load_index_sample(DATA_DIR))
 
 # --------------------------------
-# Page: 종합
+# Page: 종합 (Summary Dashboard)
 # --------------------------------
 if menu == "종합":
     st.title("🗳️ 지역구 선정 1단계 조사 결과")
     
-    # 1. Add spacing and divider after the main title
-    st.write("")
-    st.divider()
+    # Add spacing and divider after the main title
+    st.write("") 
+    st.divider() 
 
     csv_path = Path("data/scoring.csv")
     if not csv_path.exists():
@@ -343,25 +379,29 @@ if menu == "종합":
 
     # --- Always treat first column as region ---
     df = _normalize_columns(df)
-    df.rename(columns={df.columns[0]: "region"}, inplace=True)
-    label_col = "region"
+    # Use '지역' for display label
+    df.rename(columns={df.columns[0]: "지역"}, inplace=True) 
+    label_col = "지역"
 
     # --- Detect numeric columns (all except first) ---
     score_cols = [c for c in df.columns if c != label_col]
     df[score_cols] = df[score_cols].apply(pd.to_numeric, errors="coerce")
     
-    # Instantiate the bar cell factory for the main table
+    # Instantiate the bar cell factory for the main table (using MAIN colors)
     _bar_cell = _bar_cell_factory(df, score_cols, BAR_COLORS_MAIN)
+
+    # Add title for the first chart
+    st.subheader("결과 요약")
 
     # --- Build HTML table for main scoring ---
     headers = [label_col] + score_cols
     
-    # 2. Set width style for region column header
+    # Region Column Header (Fixed width)
     thead = (
         f"<th style='text-align:left;padding:6px 8px;white-space:nowrap;width:{REGION_COL_WIDTH};'>"
-        f"{label_col}</th>"
+        f"지역</th>" 
     )
-    # Remaining headers should be equally wide
+    # Remaining headers (Equal width)
     remaining_cols_count = len(score_cols)
     col_width_pct = f"{100 / remaining_cols_count}%" if remaining_cols_count > 0 else "auto"
     
@@ -374,7 +414,7 @@ if menu == "종합":
 
     rows_html = []
     for _, row in df.iterrows():
-        # 2. Set width style for region column cell
+        # Region Column Cell (Fixed width)
         cells = [
             f"<td style='padding:6px 8px;white-space:nowrap;width:{REGION_COL_WIDTH};'>"
             f"<span style='font-size:13px;'>{row[label_col]}</span>"
@@ -382,6 +422,7 @@ if menu == "종합":
         ]
         
         for c in score_cols:
+            # Bar Cell (Zero padding in TD allows bar container border (TOP3 highlight) to be visible)
             cells.append(f"<td style='padding:0px;width:{col_width_pct};'>{_bar_cell(row[c], c)}</td>")
         rows_html.append("<tr>" + "".join(cells) + "</tr>")
 
@@ -397,12 +438,12 @@ if menu == "종합":
     st.markdown(table_html, unsafe_allow_html=True)
     
     # ====================================================================
-    # [NEW SECTION] 세부 지표별 상세 분석 (Index Sample)
+    # 세부 지표별 상세 분석 (Detailed Index Analysis)
     # ====================================================================
     st.divider()
     st.subheader("세부 지표별 상세 분석")
 
-    # 1. 지표 그룹 정의
+    # 1. Indicator Groups Definition
     INDICATOR_GROUPS = {
         "유권자환경": ["유권자 수", "유동인구", "고령층 비율", "청년층 비율", "4-50대 비율", "2030여성 비율"],
         "정치지형": ["유동성A", "경합도A", "유동성B", "경합도B"],
@@ -410,11 +451,11 @@ if menu == "종합":
         "상대역량": ["현직 득표력", "민주당 득표력", "보수 득표력"],
     }
     
-    # 2. 그룹 선택 Tabs (시각적으로 더 깔끔하게 구성)
+    # 2. Group Selection Tabs
     tab_titles = list(INDICATOR_GROUPS.keys())
     tabs = st.tabs(tab_titles)
     
-    # 탭별로 내용 렌더링
+    # Render content for each tab
     for selected_group, tab in zip(tab_titles, tabs):
         with tab:
             target_cols = INDICATOR_GROUPS.get(selected_group, [])
@@ -422,49 +463,49 @@ if menu == "종합":
             if not df_idx.empty and target_cols:
                 df_idx_norm = _normalize_columns(df_idx)
                 
-                # 3. 데이터 준비 및 필터링
+                # Data preparation and filtering
                 regions_map = build_regions(df_idx_norm, bookmark_map=bookmark_map)
                 
+                # Merge with region names for display
                 df_display = pd.merge(
                     df_idx_norm, 
-                    regions_map.rename(columns={"라벨": "region_display"}), 
+                    regions_map.rename(columns={"라벨": "지역"}), 
                     on="코드", 
                     how="left"
                 )
                 
-                label_col_new = "region_display"
+                label_col_new = "지역"
                 present_cols = [c for c in target_cols if c in df_display.columns]
                 
                 if not present_cols:
                     st.info(f"선택된 그룹 ({selected_group})에 해당하는 컬럼이 데이터에 없습니다.")
                 else:
-                    # 4. 차트 데이터 준비 (모든 지역 표시 - .head(10) 제거)
+                    # Chart data preparation
                     df_final = df_display.loc[:, [label_col_new, "코드"] + present_cols].copy()
                     
                     df_final[present_cols] = df_final[present_cols].apply(pd.to_numeric, errors="coerce")
                     df_final = df_final.dropna(subset=[label_col_new]).dropna(subset=present_cols, how='all')
                     
-                    # 지역 제한 없이 모든 데이터를 표시
                     df_final = df_final.reset_index(drop=True)
                     
-                    # Determine bar color for this group
+                    # Determine bar color for this group using DETAIL colors
                     bar_color_new = BAR_COLORS_DETAIL.get(selected_group, "#6B7280")
                     
                     # Instantiate the bar cell factory for the detailed table
-                    # Note: We pass the color explicitly as a list for _bar_cell_factory to handle
+                    # NOTE: All columns in this group use the same color
                     color_dict = {col: bar_color_new for col in present_cols}
                     _bar_cell_detail = _bar_cell_factory(df_final, present_cols, color_dict)
 
 
-                    # 6. 상세 분석 HTML 테이블 생성
+                    # Detailed Analysis HTML Table Generation
                     headers_new = [label_col_new] + present_cols
                     
-                    # 2. Set width style for region column header
+                    # Region Column Header (Fixed width)
                     thead_new = (
                         f"<th style='text-align:left;padding:6px 8px;white-space:nowrap;font-weight:700;width:{REGION_COL_WIDTH};'>"
-                        f"{label_col_new}</th>"
+                        f"지역</th>" # Header title set to "지역" (3. User request)
                     )
-                    # Remaining headers should be equally wide
+                    # Remaining headers (Equal width)
                     remaining_cols_count_new = len(present_cols)
                     col_width_pct_new = f"{100 / remaining_cols_count_new}%" if remaining_cols_count_new > 0 else "auto"
 
@@ -477,13 +518,14 @@ if menu == "종합":
 
                     rows_html_new = []
                     for _, row in df_final.iterrows():
-                        # 2. Set width style for region column cell
+                        # Region Column Cell (Fixed width)
                         cells = [
                             f"<td style='padding:6px 8px;white-space:nowrap;width:{REGION_COL_WIDTH};'>"
                             f"<span style='font-size:13px;'>{row[label_col_new]}</span>"
                             f"</td>"
                         ]
                         for c in present_cols:
+                            # Bar Cell (Zero padding in TD allows bar container border (TOP3 highlight) to be visible)
                             cells.append(f"<td style='padding:0px;width:{col_width_pct_new};'>{_bar_cell_detail(row[c], c)}</td>") 
                         rows_html_new.append("<tr>" + "".join(cells) + "</tr>")
 
@@ -505,7 +547,7 @@ if menu == "종합":
                      st.info(f"선택된 그룹 ({selected_group})에 표시할 컬럼이 없습니다. (데이터 컬럼명 확인 필요)")
 
 # --------------------------------
-# Page: 지역별 분석
+# Page: 지역별 분석 (Regional Detail Analysis)
 # --------------------------------
 elif menu == "지역별 분석":
     regions = build_regions(df_pop, df_trend, df_24, df_curr, bookmark_map=bookmark_map)
@@ -547,10 +589,10 @@ elif menu == "지역별 분석":
     )
 
 # --------------------------------
-# Page: 데이터 설명
+# Page: 데이터 설명 (Data Explanation)
 # --------------------------------
 elif menu == "데이터 설명":
-    # 좌: 큰 제목 / 우: 앱 제목 (오른쪽 상단 고정)
+    # Left: Big Title / Right: App Title (fixed top right)
     c1, c2 = st.columns([1, 1])
     with c1:
         st.title("📘 지표별 구성 및 해설")
@@ -565,7 +607,7 @@ elif menu == "데이터 설명":
         )
 
     # -----------------------------
-    # 지표별 구성 및 해설 (외부 MD 파일 렌더)
+    # Render external Markdown file for explanation
     # -----------------------------
     st.divider()
 
