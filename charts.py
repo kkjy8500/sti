@@ -245,31 +245,36 @@ def render_population_box(
     bar_df["color"] = bar_df["label"].map(lambda x: "#3498DB" if x=="해당 지역" else "#95A5A6")
     
     # --- ✅ 컨테이너 높이에 맞춰 rangeStep 동적 계산 ---
-    num_cats   = max(1, bar_df.shape[0])
-    inner_h    = max(40, int(box_height_px - 20))
-    range_step = max(26, int(inner_h / num_cats))
+    num_cats   = max(1, len(bar_df))
+    inner_h    = max(40, int(box_height_px - 20))     # 위·아래 패딩 고려
+    range_step = max(26, int(inner_h / num_cats))     # 최소 두께 보장
+
+    x_max      = float(bar_df["value"].max()) if len(bar_df) else 1.0
+    if not np.isfinite(x_max) or x_max <= 0:
+        x_max = 1.0
+    x_max *= 1.1  # 살짝 여유
     
     chart = (
         alt.Chart(bar_df)
-        .mark_bar(size=range_step)  # ✅ 막대 두께 직접 지정
+        .mark_bar()
         .encode(
             y=alt.Y(
                 "label:N",
                 title=None,
                 axis=alt.Axis(labels=True, ticks=False),
-                scale=alt.Scale(type="point"),  # ✅ point 스케일로 전환
+                # ✅ Altair v5: band 스케일 + step 사용 (type 명시 필수)
+                scale=alt.Scale(type="band", range={"step": range_step}),
             ),
             x=alt.X(
                 "value:Q",
                 title=None,
                 axis=alt.Axis(format="~,", labelBound=True),
-                scale=alt.Scale(nice=True),
+                # ✅ 길이가 확실히 보이도록 도메인 고정
+                scale=alt.Scale(domain=[0, x_max], nice=False),
             ),
             color=alt.Color("color:N", scale=None, legend=None),
-            tooltip=[
-                alt.Tooltip("label:N", title="구분"),
-                alt.Tooltip("value:Q", title="유권자수", format=",.0f"),
-            ],
+            tooltip=[alt.Tooltip("label:N", title="구분"),
+                     alt.Tooltip("value:Q", title="유권자수", format=",.0f")],
         )
         .properties(
             height=box_height_px,
@@ -868,6 +873,7 @@ def render_region_detail_layout(
             render_incumbent_card(df_cur_sel)
         with c3.container(height="stretch"):
             render_prg_party_box(df_idx_sel, df_idx_all=df_idx_all)
+
 
 
 
