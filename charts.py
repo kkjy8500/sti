@@ -748,7 +748,7 @@ def render_prg_party_box(prg_sel: pd.DataFrame | None, *, df_idx_all: pd.DataFra
                 })
                 bar_df["색상"] = bar_df["항목"].map(lambda x: "#1E6BFF" if x == "해당 지역" else "#9CA3AF")
 
-                mini = (
+            mini = (
                     alt.Chart(bar_df)
                     .mark_bar()
                     .encode(
@@ -814,4 +814,5 @@ def render_region_detail_layout(
             render_incumbent_card(df_cur_sel)
         with c3.container(height="stretch"):
             render_prg_party_box(df_idx_sel, df_idx_all=df_idx_all)
+
 
