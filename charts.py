@@ -306,17 +306,17 @@ def render_age_highlight_chart(pop_sel: pd.DataFrame, *, bookmark_map: dict | No
     focus = st.radio("강조", [Y, M, O], index=0, horizontal=True, label_visibility="collapsed")
     st.markdown("<div style='height: 6px;'></div>", unsafe_allow_html=True)
 
-    inner_r, outer_r = 68, 106         # TUNE: donut radii
-    W = 320                              # TUNE: chart width (px)
-    H = max(220, int(box_height_px))     # TUNE: chart height (px)
+    # 반응형을 위해 W, H 고정값 제거
+    inner_r, outer_r = 68, 106  # TUNE: donut radii
 
     df_vis = pd.DataFrame({
         "연령": labels_order, "명": values, "비율": ratios01, "표시비율": ratios100,
         "강조": [l == focus for l in labels_order], "순서": [1, 2, 3, 4],
     })
 
+    # base 차트에 고정 width/height 제거. Streamlit의 use_container_width=True 사용
     base = (
-        alt.Chart(df_vis, width=W, height=H)
+        alt.Chart(df_vis)
         .mark_arc(innerRadius=inner_r, outerRadius=outer_r, cornerRadius=6, stroke="white", strokeWidth=1)
         .encode(
             theta=alt.Theta("비율:Q", stack=True, sort=None, scale=alt.Scale(range=[-math.pi/2, math.pi/2])),
@@ -330,28 +330,30 @@ def render_age_highlight_chart(pop_sel: pd.DataFrame, *, bookmark_map: dict | No
         )
     )
 
+    # 텍스트 패널을 도넛 차트 하단에 별도로 배치하여 반응형으로 만듦
     label_map = {Y: "청년층(18~39세)", M: "중년층(40~59세)", O: "고령층(65세 이상)"}
     idx = labels_order.index(focus)
     pct_txt = f"{(ratios100[idx]):.2f}%"
-
-    NUM_FONT, LBL_FONT = 28, 14         # TUNE: center text font sizes
-    center_y = H / 2
-
-    num_text = (
-        alt.Chart(pd.DataFrame({"t":[pct_txt]}), width=W, height=H)
-        .mark_text(fontWeight="bold", fontSize=NUM_FONT, color="#0f172a")
-        .encode(text="t:N", x=alt.value(W/2), y=alt.value(center_y + 2))
-    )
-    lbl_text = (
-        alt.Chart(pd.DataFrame({"t":[label_map.get(focus, focus)]}), width=W, height=H)
-        .mark_text(fontSize=LBL_FONT, color="#475569", baseline="top")
-        .encode(text="t:N", x=alt.value(W/2), y=alt.value(center_y + 28))
-    )
-
+    lbl_txt = label_map.get(focus, focus)
+    
+    # ----------------------------------------------------------------------------------
+    # Streamlit 컬럼을 사용하여 차트와 텍스트를 반응형으로 배치 (도넛 아래)
+    # Altair의 텍스트 레이어는 이제 사용하지 않음
+    # ----------------------------------------------------------------------------------
+    
+    # 도넛 차트 렌더링
     st.altair_chart(
-        (base + num_text + lbl_text).properties(autosize=alt.AutoSizeParams(type="pad")).configure_view(stroke=None),
+        base.properties(autosize=alt.AutoSizeParams(type="pad")).configure_view(stroke=None),
         use_container_width=True, theme=None
     )
+    
+    # 텍스트 패널 (도넛 아래)
+    st.markdown(f"""
+        <div style='text-align: center; margin-top: -15px;'>
+            <div style='font-weight: bold; font-size: 28px; color: #0f172a;'>{pct_txt}</div>
+            <div style='font-size: 14px; color: #475569; margin-top: 4px;'>{lbl_txt}</div>
+        </div>
+    """, unsafe_allow_html=True)
 
 # =========================================================
 # Sex ratio by age – horizontal bars
@@ -747,15 +749,21 @@ def render_prg_party_box(prg_sel: pd.DataFrame | None, *, df_idx_all: pd.DataFra
                           (avg_strength/100.0 if avg_strength>1 else avg_strength)]
                 })
                 bar_df["색상"] = bar_df["항목"].map(lambda x: "#1E6BFF" if x == "해당 지역" else "#9CA3AF")
-
+        
                 mini = (
                     alt.Chart(bar_df)
                     .mark_bar()
                     .encode(
                         x=alt.X(
                             "값:Q",
-                            axis=alt.Axis(title=None, format=".0%", values=[v/100 for v in range(0, 101, 2)]),
-                            scale=alt.Scale(domain=[0, float(bar_df["값"].max())*1.1], nice=False)
+                            axis=alt.Axis(
+                                title=None, 
+                                # 축 값 0%, 2%, 4%, ..., 10% 고정
+                                format=".0%", 
+                                values=[v/100.0 for v in range(0, 11, 2)] 
+                            ),
+                            # 최대 축을 10% (0.1)로 고정
+                            scale=alt.Scale(domain=[0, 0.1], nice=False) 
                         ),
                         y=alt.Y("항목:N", title=None, sort=["해당 지역", "10개 평균"]),
                         color=alt.Color("색상:N", scale=None, legend=None),
@@ -765,8 +773,8 @@ def render_prg_party_box(prg_sel: pd.DataFrame | None, *, df_idx_all: pd.DataFra
                     .configure_view(stroke=None)
                 )
                 st.altair_chart(mini, use_container_width=True, theme=None)
-        except Exception:
-            pass
+            except Exception:
+                pass
 
 # =========================================================
 # Region detail layout
@@ -813,3 +821,4 @@ def render_region_detail_layout(
             render_incumbent_card(df_cur_sel)
         with c3.container(height="stretch"):
             render_prg_party_box(df_idx_sel, df_idx_all=df_idx_all)
+
