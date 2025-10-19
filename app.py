@@ -1,4 +1,3 @@
-# app.py
 # Purpose: Streamlit main app – lean version
 # How to change later:
 # - To adjust page title/icon/layout: edit st.set_page_config below.
@@ -12,14 +11,14 @@ import pandas as pd
 from pathlib import Path
 
 from data_loader import (
-    load_bookmark,            # bookmark.csv (optional but preferred)
-    load_bookmark_map,        # -> dict, standard_key -> actual column
-    load_population_agg,      # population.csv
-    load_party_labels,        # party_labels.csv
-    load_vote_trend,          # vote_trend.csv
-    load_results_2024,        # 5_na_dis_results.csv
-    load_current_info,        # current_info.csv
-    load_index_sample,        # index_sample.csv
+    load_bookmark,             # bookmark.csv (optional but preferred)
+    load_bookmark_map,         # -> dict, standard_key -> actual column
+    load_population_agg,       # population.csv
+    load_party_labels,         # party_labels.csv
+    load_vote_trend,           # vote_trend.csv
+    load_results_2024,         # 5_na_dis_results.csv
+    load_current_info,         # current_info.csv
+    load_index_sample,         # index_sample.csv
 )
 
 from charts import (
@@ -184,8 +183,8 @@ def build_regions(primary_df: pd.DataFrame, *fallback_dfs: pd.DataFrame, bookmar
 # Load Data (single pass, bookmark-first)
 # --------------------------------
 with st.spinner("데이터 불러오는 중..."):
-    df_bookmark = load_bookmark(DATA_DIR)                  # may be empty
-    bookmark_map = load_bookmark_map(df_bookmark)          # dict or {}
+    df_bookmark = load_bookmark(DATA_DIR)              # may be empty
+    bookmark_map = load_bookmark_map(df_bookmark)      # dict or {}
 
     df_pop   = ensure_code_col(load_population_agg(DATA_DIR))
     df_party = ensure_code_col(load_party_labels(DATA_DIR))
@@ -229,6 +228,7 @@ if menu == "종합":
     df[score_cols] = df[score_cols].apply(pd.to_numeric, errors="coerce")
 
     # --- Colors & scaling ---
+    # Global colors for the main scoring table
     bar_colors = {
         "합계": "#3498DB",
         "유권자환경": "#48C9B0",
@@ -238,7 +238,7 @@ if menu == "종합":
     }
     vmax = {c: (float(df[c].max()) if df[c].notna().any() else 0.0) for c in score_cols}
 
-    # --- HTML bar cell ---
+    # --- HTML bar cell for main table ---
     def _bar_cell(val, col):
         try:
             v = float(val)
@@ -255,7 +255,7 @@ if menu == "종합":
             f'</div>'
         )
 
-    # --- Build HTML table ---
+    # --- Build HTML table for main scoring ---
     headers = [label_col] + score_cols
     thead = "".join(
         [f"<th style='text-align:left;padding:6px 8px;white-space:nowrap;'>{h}</th>" for h in headers]
@@ -278,6 +278,123 @@ if menu == "종합":
     )
 
     st.markdown(table_html, unsafe_allow_html=True)
+    
+    # ====================================================================
+    # 세부 지표별 상세 분석 (Index Sample)
+    # ====================================================================
+    st.divider()
+    st.subheader("세부 지표별 상세 분석 (Index Sample)")
+
+    # 1. 지표 그룹 정의
+    INDICATOR_GROUPS = {
+        "유권자환경": ["유권자 수", "유동인구", "고령층 비율", "청년층 비율", "4-50대 비율", "2030여성 비율"],
+        "정치지형": ["유동성A", "경합도A", "유동성B", "경합도B"],
+        "주체역량": ["진보정당 득표력", "진보당 당원수", "진보당 지방선거 후보 수"],
+        "상대역량": ["현직 득표력", "민주당 득표력", "보수 득표력"],
+    }
+    
+    # 지표 그룹별 색상 정의 (선택된 그룹의 모든 지표에 동일 색상 적용)
+    DETAIL_GROUP_COLORS = {
+        "유권자환경": "#00CC99", # Green
+        "정치지형": "#3498DB", # Blue
+        "주체역량": "#E74C3C", # Red
+        "상대역량": "#F39C12", # Yellow/Orange
+    }
+    
+    # 2. 그룹 선택 Tabs 
+    tab_titles = list(INDICATOR_GROUPS.keys())
+    tabs = st.tabs(tab_titles)
+    
+    # 5. 상세 테이블용 HTML Bar Cell 함수 
+    def _bar_cell_detail_factory(vmax_data, color):
+        """클로저를 사용하여 vmax_data와 color를 캡처하는 Bar Cell 함수를 생성"""
+        def _bar_cell_detail(val, col):
+            try:
+                v = float(val)
+            except Exception:
+                return ""
+            mx = vmax_data.get(col, 0.0) or 1.0
+            pct = max(0.0, min(100.0, (v / mx) * 100.0))
+            
+            return (
+                f'<div style="position:relative;width:100%;background:#F3F4F6;height:18px;border-radius:4px;overflow:hidden;">'
+                f'  <div style="width:{pct:.2f}%;height:100%;background:{color};"></div>'
+                f'  <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;'
+                f'font-size:12px;font-weight:600;color:#111827;">{v:.3f}</div>'
+                f'</div>'
+            )
+        return _bar_cell_detail
+
+    # 탭별로 내용 렌더링
+    for selected_group, tab in zip(tab_titles, tabs):
+        with tab:
+            target_cols = INDICATOR_GROUPS.get(selected_group, [])
+            bar_color_new = DETAIL_GROUP_COLORS.get(selected_group, "#6B7280")
+            
+            if not df_idx.empty and target_cols:
+                df_idx_norm = _normalize_columns(df_idx)
+                
+                # 3. 데이터 준비 및 필터링
+                regions_map = build_regions(df_idx_norm, bookmark_map=bookmark_map)
+                
+                df_display = pd.merge(
+                    df_idx_norm, 
+                    regions_map.rename(columns={"라벨": "region_display"}), 
+                    on="코드", 
+                    how="left"
+                )
+                
+                label_col_new = "region_display"
+                present_cols = [c for c in target_cols if c in df_display.columns]
+                
+                if not present_cols:
+                    st.info(f"선택된 그룹 ({selected_group})에 해당하는 컬럼이 데이터에 없습니다.")
+                else:
+                    # 4. 차트 데이터 준비 (모든 지역 표시 - .head(10) 제거)
+                    df_final = df_display.loc[:, [label_col_new, "코드"] + present_cols].copy()
+                    
+                    df_final[present_cols] = df_final[present_cols].apply(pd.to_numeric, errors="coerce")
+                    df_final = df_final.dropna(subset=[label_col_new]).dropna(subset=present_cols, how='all')
+                    
+                    # 지역 제한 없이 모든 데이터를 표시
+                    df_final = df_final.reset_index(drop=True)
+                    
+                    # 막대 차트 스케일링을 위한 컬럼별 최댓값 계산
+                    vmax_new = {c: (float(df_final[c].max()) if df_final[c].notna().any() else 0.0) for c in present_cols}
+                    
+                    # Bar Cell 함수 인스턴스화
+                    _bar_cell_detail = _bar_cell_detail_factory(vmax_new, bar_color_new)
+
+                    # 6. 상세 분석 HTML 테이블 생성
+                    headers_new = [label_col_new] + present_cols
+                    thead_new = "".join(
+                        [f"<th style='text-align:left;padding:6px 8px;white-space:nowrap;font-weight:700;'>{h}</th>" for h in headers_new]
+                    )
+
+                    rows_html_new = []
+                    for _, row in df_final.iterrows():
+                        cells = [f"<td style='padding:6px 8px;white-space:nowrap;'>{row[label_col_new]}</td>"]
+                        for c in present_cols:
+                            # 캡처된 함수 사용
+                            cells.append(f"<td style='padding:6px 8px;'>{_bar_cell_detail(row[c], c)}</td>") 
+                        rows_html_new.append("<tr>" + "".join(cells) + "</tr>")
+
+                    table_html_new = (
+                        "<div style='overflow-x:auto;'>"
+                        "<table style='border-collapse:separate;border-spacing:0;width:100%;font-size:13px;'>"
+                        f"<thead><tr>{thead_new}</tr></thead>"
+                        f"<tbody>{''.join(rows_html_new)}</tbody>"
+                        "</table>"
+                        "</div>"
+                    )
+
+                    st.markdown(table_html_new, unsafe_allow_html=True)
+
+            else:
+                if df_idx.empty:
+                    st.info("`index_sample.csv` 데이터프레임이 비어 있어 상세 분석을 렌더링할 수 없습니다.")
+                else:
+                     st.info(f"선택된 그룹 ({selected_group})에 표시할 컬럼이 없습니다. (데이터 컬럼명 확인 필요)")
 
 # --------------------------------
 # Page: 지역별 분석
