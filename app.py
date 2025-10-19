@@ -33,38 +33,33 @@ from charts import (
 )
 
 # ====================================================================
-# Configuration: Absolute Bar Scaling (Used in '결과 요약' - Summary Table)
-# Columns listed here will use the specified value as the 100% max score 
-# for consistent bar length calculation across sessions.
+# CONFIGURATION CONSTANTS (MUST BE DEFINED EARLY)
 # ====================================================================
+APP_TITLE = "지역구 선정 1단계 조사 결과"
+DATA_DIR = Path("data") # FIX: Moved up to ensure initialization before use.
+
+# Absolute Scaling: Columns listed here will use the specified value as the 100% max score
 ABSOLUTE_MAX_SCORES = {
-    # Main Aggregate Scores (Max 100 or 20/30)
-    "합계": 100.0,          # Total Score
-    "유권자환경": 20.0,     # Electorate Environment Score
-    "정치지형": 20.0,       # Political Landscape Score
-    "주체역량": 30.0,       # Subjective Capacity Score
-    "상대역량": 30.0,       # Opponent Capacity Score
-    
-    # Ratios/Scores with absolute max 1.0 or 10.0
-    "고령층 비율": 1.0,     # Elderly Ratio (Max 1.0)
-    "청년층 비율": 1.0,     # Youth Ratio (Max 1.0)
-    "4-50대 비율": 1.0,     # Middle-Aged Ratio (Max 1.0)
-    "2030여성 비율": 1.0,   # Young Female Ratio (Max 1.0)
-    "진보정당 득표력": 10.0, # Progressive Party Electorate Power (Max 10.0)
-    
-    # Power Scores specified by the user to be fixed at 100.0
-    "현직 득표력": 100.0,   # Incumbent Electorate Power (Max 100.0)
-    "민주당 득표력": 100.0, # Democratic Party Electorate Power (Max 100.0)
-    "보수 득표력": 100.0, # Conservative Party Electorate Power (Max 100.0)
+    "합계": 100.0,
+    "유권자환경": 20.0,
+    "정치지형": 20.0,
+    "주체역량": 30.0,
+    "상대역량": 30.0,
+    "고령층 비율": 1.0,
+    "청년층 비율": 1.0,
+    "4-50대 비율": 1.0,
+    "2030여성 비율": 1.0,
+    "진보정당 득표력": 10.0,
+    "현직 득표력": 100.0,
+    "민주당 득표력": 100.0,
+    "보수 득표력": 100.0,
 }
-# ====================================================================
 
 # ===== Style Configurations (English Comments for Maintainability) =====
 # Fixed width for the Region Name column (to ensure stable alignment)
 REGION_COL_WIDTH = "150px" 
 
 # FIXED HIGHLIGHT: List of regions for permanent row highlighting in the '결과 요약' table.
-# Updated with full region names as requested by the user for accurate matching.
 FIXED_HIGHLIGHT_REGIONS = ["서울 서대문구갑", "경기 평택시을", "경기 화성시을"] 
 
 # FIXED HIGHLIGHT: Background color for the entire row of the fixed highlight regions (Summary Table only)
@@ -81,8 +76,7 @@ BAR_COLORS_MAIN = {
     "주체역량": "#76D7C4",   # Subjective Capacity Bar Color (Very Light Green)
     "상대역량": "#2ECC71",   # Opponent Capacity Bar Color (Emerald Green)
 }
-# BAR_COLORS_DETAIL removed as the detailed table now uses text-only cells.
-# ==============================
+# ====================================================================
 
 
 # ===== Utility Functions (Kept concise and unchanged, added comments where necessary) =====
@@ -323,7 +317,18 @@ def _text_only_cell(val: float | object, col_name: str) -> str:
         f'</div>'
     )
 # --------------------------------
-# Data Loading
+# Page Config
+# --------------------------------
+st.set_page_config(page_title=APP_TITLE, page_icon="🗳️", layout="wide")
+
+# --------------------------------
+# Sidebar (Navigation)
+# --------------------------------
+st.sidebar.header("메뉴 선택")
+menu = st.sidebar.radio("페이지", ["종합", "지역별 분석", "데이터 설명"], index=0)
+
+# --------------------------------
+# Data Loading (Uses DATA_DIR defined above)
 # --------------------------------
 with st.spinner("데이터 불러오는 중..."):
     # Load all required dataframes
