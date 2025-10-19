@@ -839,8 +839,10 @@ def render_region_detail_layout(
     st.markdown("### 👥 인구 정보")
     with st.container():
         col1, col2, col3 = st.columns([1.4, 1.5, 2.6], gap="small")
-        with col1.container(border=True, height="stretch"):
-            render_population_box(df_pop_sel, df_pop_all=df_pop_all, bookmark_map=bookmark_map)
+        with col1:
+            with st.container(border=True):
+                render_population_box(df_pop_sel, df_pop_all=df_pop_all, bookmark_map=bookmark_map, box_height_px=170)
+        st.divider()
         with col2.container(border=True, height="stretch"):
             st.markdown("**연령 구성**")
             render_age_highlight_chart(df_pop_sel, bookmark_map=bookmark_map)
@@ -860,6 +862,7 @@ def render_region_detail_layout(
             render_incumbent_card(df_cur_sel)
         with c3.container(height="stretch"):
             render_prg_party_box(df_idx_sel, df_idx_all=df_idx_all)
+
 
 
 
