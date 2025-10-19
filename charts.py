@@ -256,28 +256,31 @@ def render_population_box(
     
     chart = (
         alt.Chart(bar_df)
-        .mark_bar()
+        # 막대 두께를 여기서 직접 지정 (세로 두께)
+        .mark_bar(size=range_step)
         .encode(
             y=alt.Y(
                 "label:N",
                 title=None,
                 axis=alt.Axis(labels=True, ticks=False),
-                # ✅ Altair v5: band 스케일 + step 사용 (type 명시 필수)
-                scale=alt.Scale(type="band", range={"step": range_step}),
+                # ✅ band 스케일만 지정 (step은 금지), 패딩만 살짝
+                scale=alt.Scale(type="band", paddingInner=0.2, paddingOuter=0.1),
             ),
             x=alt.X(
                 "value:Q",
                 title=None,
                 axis=alt.Axis(format="~,", labelBound=True),
-                # ✅ 길이가 확실히 보이도록 도메인 고정
+                # 길이가 확실히 보이도록 도메인 고정
                 scale=alt.Scale(domain=[0, x_max], nice=False),
             ),
             color=alt.Color("color:N", scale=None, legend=None),
-            tooltip=[alt.Tooltip("label:N", title="구분"),
-                     alt.Tooltip("value:Q", title="유권자수", format=",.0f")],
+            tooltip=[
+                alt.Tooltip("label:N", title="구분"),
+                alt.Tooltip("value:Q", title="유권자수", format=",.0f"),
+            ],
         )
         .properties(
-            height=box_height_px,
+            height=box_height_px,                       # ✅ 높이는 계속 컨테이너에 맞춤
             padding={"left": 0, "right": 0, "top": 4, "bottom": 2},
         )
         .configure_view(stroke=None)
@@ -873,6 +876,7 @@ def render_region_detail_layout(
             render_incumbent_card(df_cur_sel)
         with c3.container(height="stretch"):
             render_prg_party_box(df_idx_sel, df_idx_all=df_idx_all)
+
 
 
 
