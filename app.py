@@ -58,7 +58,7 @@ ABSOLUTE_MAX_SCORES = {
     # Power Scores specified by the user to be fixed at 100.0
     "현직 득표력": 100.0,   # Incumbent Electorate Power (Max 100.0)
     "민주당 득표력": 100.0, # Democratic Party Electorate Power (Max 100.0)
-    "보수 득표력": 100.0,   # Conservative Party Electorate Power (Max 100.0)
+    "보수 득표력": 100.0, # Conservative Party Electorate Power (Max 100.0)
     
     # NOTE: Columns like '유권자 수' (Electorate Count) are NOT listed here, 
     # so they will use the largest value in the current data as the 100% reference.
@@ -66,13 +66,18 @@ ABSOLUTE_MAX_SCORES = {
 # ====================================================================
 
 # ===== Style Configurations =====
-# Width setting for the region label column (fixed width in px for alignment)
+# Region column width (fixed width in px for uniform alignment)
 REGION_COL_WIDTH = "150px" 
 
-# Border style applied to the bar container for the top 3 highest scores
-TOP3_HIGHLIGHT_BORDER_STYLE = "2px solid" 
+# FIXED HIGHLIGHT: List of regions that must ALWAYS be highlighted (row background)
+FIXED_HIGHLIGHT_REGIONS = ["서대문갑", "평택을", "화성을"] 
+# FIXED HIGHLIGHT: Background color for the entire row of the fixed highlight regions (Used in '결과 요약' table only)
+FIXED_HIGHLIGHT_ROW_BG = "#FFFBEB" # Very light yellow for fixed region rows
 
-# Colors for the main scoring bars (Used in the '종합' tab)
+# DYNAMIC HIGHLIGHT: Background color for the bar container when score is in the Top 3 
+DYNAMIC_HIGHLIGHT_CELL_BG = "#E0F2FE" # Light sky blue for top 3 scores (Bar table only)
+
+# Colors for the main scoring bars (Used in the '종합' tab - '결과 요약')
 BAR_COLORS_MAIN = {
     "합계": "#3498DB",       # Blue
     "유권자환경": "#48C9B0", # Light Cyan
@@ -266,8 +271,9 @@ def _format_value(val: float | object, col_name: str) -> str:
 
 def _bar_cell_factory(score_df: pd.DataFrame, score_cols: list[str], bar_colors: dict) -> callable:
     """
-    Generates an HTML bar cell function, incorporating absolute max scaling, top 3 highlighting 
-    with a border, and number formatting.
+    Generates an HTML bar cell function, incorporating absolute max scaling, 
+    Top 3 highlighting with DYNAMIC_HIGHLIGHT_CELL_BG, and number formatting.
+    This is used for the '결과 요약' (Summary Chart) where bars are required.
     """
     
     # Pre-calculate top 3 values for each column
@@ -275,6 +281,7 @@ def _bar_cell_factory(score_df: pd.DataFrame, score_cols: list[str], bar_colors:
     for col in score_cols:
         try:
             # Use nlargest to find the top 3 scores
+            # Use keep='all' to include ties
             top3_values[col] = set(score_df.nlargest(3, col, keep='all')[col].tolist())
         except KeyError:
             top3_values[col] = set()
@@ -287,7 +294,7 @@ def _bar_cell_factory(score_df: pd.DataFrame, score_cols: list[str], bar_colors:
     
     def _bar_cell(val, col):
         """
-        Renders a single cell with an HTML bar, absolute scaling, value formatting, and highlight border.
+        Renders a single cell with an HTML bar, absolute scaling, and dynamic highlight background.
         """
         try:
             v = float(val)
@@ -310,29 +317,51 @@ def _bar_cell_factory(score_df: pd.DataFrame, score_cols: list[str], bar_colors:
         # Calculate percentage based on absolute/dynamic max
         pct = max(0.0, min(100.0, (v / max_score) * 100.0))
         
-        # Check for Top 3 highlight (Top 3 gets a border defined by TOP3_HIGHLIGHT_BORDER_STYLE)
+        # Check for Top 3 highlight (Top 3 gets a subtle background color)
         is_top3 = col in top3_values and v in top3_values[col]
         
         # Determine bar color from the passed dict
         color = bar_colors.get(col, "#6B7280") # default to gray
         
-        # Top 3 Visual: Add a border to the bar container div using the group's color
-        cell_border = f"{TOP3_HIGHLIGHT_BORDER_STYLE} {color}" if is_top3 else "none"
+        # Apply DYNAMIC_HIGHLIGHT_CELL_BG for Top 3 scores
+        container_bg = DYNAMIC_HIGHLIGHT_CELL_BG if is_top3 else "#F3F4F6" # Default background color for bar container
         
         # Format value display (comma for counts, decimals for scores)
         formatted_value = _format_value(v, col)
 
         # HTML Structure for the bar
         return (
+            # Outer padding remains the same
             f'<div style="padding:6px 8px; height:100%; box-sizing:border-box;">'
-            f'<div style="position:relative;width:100%;background:#F3F4F6;height:18px;border-radius:4px;overflow:hidden;min-width:50px; border:{cell_border}; transition: border 0.2s ease-in-out;">'
-            f'  <div style="width:{pct:.2f}%;height:100%;background:{color};"></div>'
+            # Inner container uses container_bg for dynamic highlight
+            f'<div style="position:relative;width:100%;background:{container_bg};height:18px;border-radius:4px;overflow:hidden;min-width:50px; transition: background-color 0.2s ease-in-out;">'
+            # Bar itself
+            f'  <div style="width:{pct:.2f}%;height:100%;background:{color}; border-radius:4px 0 0 4px;"></div>' # Added border-radius to the bar
+            # Value text overlay
             f'  <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;'
-            f'font-size:12px;font-weight:600;color:#111827; text-shadow: 0 0 1px #fff;">{formatted_value}</div>' # text-shadow for better contrast
+            f'font-size:12px;font-weight:600;color:#111827; text-shadow: 0 0 1px #fff;">{formatted_value}</div>' 
             f'</div>'
             f'</div>'
         )
     return _bar_cell
+
+# Helper to render a cell with only formatted text (for "세부 지표별 상세 분석")
+def _text_only_cell(val: float | object, col_name: str) -> str:
+    """
+    Renders a single cell with only the formatted score (no bar, no dynamic highlight).
+    Used for the lower detailed index table.
+    """
+    
+    formatted_value = _format_value(val, col_name)
+    
+    # Text color and minimal styling for a plain data table cell
+    # Use standard padding (6px 8px) to align with bar cells in the region column
+    return (
+        f'<div style="text-align:center; padding: 6px 8px; font-size:13px; font-weight:600; color:#1F2937;">'
+        f'{formatted_value}'
+        f'</div>'
+    )
+
 
 # --------------------------------
 # Load Data (single pass, bookmark-first)
@@ -388,6 +417,7 @@ if menu == "종합":
     df[score_cols] = df[score_cols].apply(pd.to_numeric, errors="coerce")
     
     # Instantiate the bar cell factory for the main table (using MAIN colors)
+    # This chart (결과 요약) maintains fixed row highlights and dynamic bar highlights.
     _bar_cell = _bar_cell_factory(df, score_cols, BAR_COLORS_MAIN)
 
     # Add title for the first chart
@@ -414,17 +444,23 @@ if menu == "종합":
 
     rows_html = []
     for _, row in df.iterrows():
+        # Check if this region needs a fixed row highlight (FOR UPPER TABLE ONLY)
+        is_fixed_highlight = row[label_col] in FIXED_HIGHLIGHT_REGIONS
+        row_style = f"background-color:{FIXED_HIGHLIGHT_ROW_BG};" if is_fixed_highlight else ""
+
         # Region Column Cell (Fixed width)
         cells = [
             f"<td style='padding:6px 8px;white-space:nowrap;width:{REGION_COL_WIDTH};'>"
-            f"<span style='font-size:13px;'>{row[label_col]}</span>"
+            f"<span style='font-size:13px; font-weight:{'700' if is_fixed_highlight else '600'};'>{row[label_col]}</span>" # Use bold for highlighted rows
             f"</td>"
         ]
         
         for c in score_cols:
-            # Bar Cell (Zero padding in TD allows bar container border (TOP3 highlight) to be visible)
+            # Bar Cell (Zero padding in TD allows bar container to fill space)
             cells.append(f"<td style='padding:0px;width:{col_width_pct};'>{_bar_cell(row[c], c)}</td>")
-        rows_html.append("<tr>" + "".join(cells) + "</tr>")
+        
+        # Apply row style to the entire <tr>
+        rows_html.append(f"<tr style='{row_style}'>" + "".join(cells) + "</tr>")
 
     table_html = (
         "<div style='overflow-x:auto;'>"
@@ -439,6 +475,8 @@ if menu == "종합":
     
     # ====================================================================
     # 세부 지표별 상세 분석 (Detailed Index Analysis)
+    # Renders as a plain data table (numbers only, NO BARS, NO HIGHLIGHTS).
+    # FIXED_HIGHLIGHT_ROW_BG is explicitly removed here per user request.
     # ====================================================================
     st.divider()
     st.subheader("세부 지표별 상세 분석")
@@ -488,22 +526,13 @@ if menu == "종합":
                     
                     df_final = df_final.reset_index(drop=True)
                     
-                    # Determine bar color for this group using DETAIL colors
-                    bar_color_new = BAR_COLORS_DETAIL.get(selected_group, "#6B7280")
-                    
-                    # Instantiate the bar cell factory for the detailed table
-                    # NOTE: All columns in this group use the same color
-                    color_dict = {col: bar_color_new for col in present_cols}
-                    _bar_cell_detail = _bar_cell_factory(df_final, present_cols, color_dict)
-
-
-                    # Detailed Analysis HTML Table Generation
+                    # Detailed Analysis HTML Table Generation (Text-Only)
                     headers_new = [label_col_new] + present_cols
                     
                     # Region Column Header (Fixed width)
                     thead_new = (
                         f"<th style='text-align:left;padding:6px 8px;white-space:nowrap;font-weight:700;width:{REGION_COL_WIDTH};'>"
-                        f"지역</th>" # Header title set to "지역" (3. User request)
+                        f"지역</th>" 
                     )
                     # Remaining headers (Equal width)
                     remaining_cols_count_new = len(present_cols)
@@ -511,23 +540,28 @@ if menu == "종합":
 
                     thead_new += "".join(
                         [
-                            f"<th style='text-align:left;padding:6px 8px;white-space:nowrap;width:{col_width_pct_new};'>{h}</th>" 
+                            f"<th style='text-align:center;padding:6px 8px;white-space:nowrap;width:{col_width_pct_new};'>{h}</th>" 
                             for h in present_cols
                         ]
                     )
 
                     rows_html_new = []
                     for _, row in df_final.iterrows():
-                        # Region Column Cell (Fixed width)
+                        # Fixed row highlight is explicitly removed for this detailed table.
+                        row_style = "" 
+                        
+                        # Region Column Cell (Fixed width) - Use standard font weight
                         cells = [
                             f"<td style='padding:6px 8px;white-space:nowrap;width:{REGION_COL_WIDTH};'>"
-                            f"<span style='font-size:13px;'>{row[label_col_new]}</span>"
+                            f"<span style='font-size:13px; font-weight:600;'>{row[label_col_new]}</span>"
                             f"</td>"
                         ]
                         for c in present_cols:
-                            # Bar Cell (Zero padding in TD allows bar container border (TOP3 highlight) to be visible)
-                            cells.append(f"<td style='padding:0px;width:{col_width_pct_new};'>{_bar_cell_detail(row[c], c)}</td>") 
-                        rows_html_new.append("<tr>" + "".join(cells) + "</tr>")
+                            # Text-only Cell (Standard padding in TD, using _text_only_cell function)
+                            cells.append(f"<td style='padding:0;width:{col_width_pct_new};'>{_text_only_cell(row[c], c)}</td>") 
+                        
+                        # Apply row style (now empty) to the entire <tr>
+                        rows_html_new.append(f"<tr style='{row_style}'>" + "".join(cells) + "</tr>")
 
                     table_html_new = (
                         "<div style='overflow-x:auto;'>"
