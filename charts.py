@@ -86,172 +86,212 @@ def _render_topbar(page_title: str | None, app_title: str | None):
 # - Change x-axis number format: edit axis format in alt.Axis.
 # =========================================================
 def render_population_box(pop_sel: pd.DataFrame, *, df_pop_all: pd.DataFrame, bookmark_map: dict | None = None, box_height_px: int = 240):
-    import re, numpy as np, pandas as pd, altair as alt, streamlit as st
+    # ---------- WATCHDOG: this block always leaves traces on screen ----------
+    import re, time
+    ts = time.strftime("%H:%M:%S")
+    try:
+        import numpy as np, pandas as pd, altair as alt, streamlit as st
+    except Exception as e:
+        st.error(f"[POPBOX {ts}] 핵심 라이브러리 import 실패"); st.exception(e); return
 
-    # -------------------------------
-    # [1] 데이터 확인 및 준비
-    # -------------------------------
-    if pop_sel is None or pop_sel.empty:
-        st.info("인구 데이터가 없습니다."); return
-    df_s = pop_sel.copy()
-    df_a = df_pop_all.copy() if df_pop_all is not None else pd.DataFrame()
+    log = []
+    def ping(msg): 
+        log.append(msg)
 
-    COLOR_BLUE = "#3498DB"
-    COLOR_GRAY = "#95A5A6"
+    st.markdown(f"<!-- POPBOX-enter {ts} -->", unsafe_allow_html=True)
+    ping("STEP0: entered")
 
-    # -------------------------------
-    # [2] 유틸 함수 정의
-    # -------------------------------
-    def _norm(x: str) -> str:
-        x = str(x)
-        return re.sub(r"\s+", "", x).lower()
+    try:
+        # -------------------------------
+        # [1] 데이터 확인 및 준비
+        # -------------------------------
+        if pop_sel is None or pop_sel.empty:
+            st.info("[POPBOX] 인구 데이터(pop_sel)가 비어 있음"); return
+        df_s = pop_sel.copy()
+        df_a = df_pop_all.copy() if df_pop_all is not None else pd.DataFrame()
+        COLOR_BLUE, COLOR_GRAY = "#3498DB", "#95A5A6"
+        ping("STEP1: data copied")
 
-    def _to_num(v):
-        try:
-            return float(str(v).replace(",", "").strip())
-        except:
-            return np.nan
+        # -------------------------------
+        # [2] 유틸
+        # -------------------------------
+        def _norm(x: str) -> str:
+            x = str(x)
+            return re.sub(r"\s+", "", x).lower()
 
-    def _find_total_col_in(df: pd.DataFrame, bookmark_map: dict | None):
-        if bookmark_map:
-            for k in ["total_voters", "총유권자", "전체유권자"]:
-                v = bookmark_map.get(k)
-                if v and v in df.columns:
-                    return v
-        aliases = [
-            "전체 유권자 수","전체유권자수","전체 유권자","전체유권자",
-            "총유권자","유권자수","total_voters","voters","totalvoters"
-        ]
-        norm_cols = [_norm(c) for c in df.columns]
-        for a in aliases:
-            if _norm(a) in norm_cols:
-                return df.columns[norm_cols.index(_norm(a))]
-        for c in df.columns:
-            n = _norm(c)
-            if any(p in n for p in ["유권자","voter"]):
-                return c
-        return None
+        def _to_num(v):
+            try:
+                return float(str(v).replace(",", "").strip())
+            except:
+                return np.nan
 
-    def _find_region_key(df: pd.DataFrame, bookmark_map: dict | None):
-        if bookmark_map:
-            for k in ["region_code","선거구코드","지역코드","구코드","code","region"]:
-                v = bookmark_map.get(k)
-                if v and v in df.columns:
-                    return v
-        aliases = [
-            "선거구코드","지역구코드","지역코드","구코드","자치구코드",
-            "선거구","지역구","지역","자치구","구","행정구역",
-            "code","region_code","region","district","gu"
-        ]
-        norm_cols = [_norm(c) for c in df.columns]
-        for a in aliases:
-            na = _norm(a)
-            for i, nc in enumerate(norm_cols):
-                if na == nc or na in nc:
-                    return df.columns[i]
-        for c in df.columns:
-            s = df[c]
-            if s.dtype == "O":
-                uniq = s.dropna().nunique()
-                if 1 < uniq < len(df):
+        def _find_total_col_in(df: pd.DataFrame, bookmark_map: dict | None):
+            if bookmark_map:
+                for k in ["total_voters", "총유권자", "전체유권자"]:
+                    v = bookmark_map.get(k)
+                    if v and v in df.columns:
+                        return v
+            aliases = ["전체 유권자 수","전체유권자수","전체 유권자","전체유권자","총유권자","유권자수","total_voters","voters","totalvoters"]
+            norm_cols = [_norm(c) for c in df.columns]
+            for a in aliases:
+                na = _norm(a)
+                if na in norm_cols:
+                    return df.columns[norm_cols.index(na)]
+            # 키워드 후보
+            for c in df.columns:
+                n = _norm(c)
+                if ("유권자" in n) or ("voter" in n):
                     return c
-        return None
+            return None
 
-    # -------------------------------
-    # [3] 주요 컬럼 탐색 및 수치 변환
-    # -------------------------------
-    total_col = _find_total_col_in(df_s, bookmark_map)
-    if not total_col or total_col not in df_s.columns:
-        st.info("⚠️ 총유권자 컬럼을 찾지 못했습니다."); return
+        def _find_region_key(df: pd.DataFrame, bookmark_map: dict | None):
+            if bookmark_map:
+                for k in ["region_code","선거구코드","지역코드","구코드","code","region"]:
+                    v = bookmark_map.get(k)
+                    if v and v in df.columns:
+                        return v
+            aliases = ["선거구코드","지역구코드","지역코드","구코드","자치구코드","선거구","지역구","지역","자치구","구","행정구역","code","region_code","region","district","gu"]
+            norm_cols = [_norm(c) for c in df.columns]
+            for a in aliases:
+                na = _norm(a)
+                for i, nc in enumerate(norm_cols):
+                    if (na == nc) or (na in nc):
+                        return df.columns[i]
+            # 값 분포 기반 추정
+            for c in df.columns:
+                s = df[c]
+                if s.dtype == "O":
+                    u = s.dropna().nunique()
+                    if 1 < u < len(df):
+                        return c
+            return None
 
-    float_col = None
-    for c in df_s.columns:
-        if any(k in str(c) for k in ["유동", "전입", "전출", "유출입", "floating"]):
-            float_col = c; break
+        ping("STEP2: utils ready")
 
-    df_s[total_col] = pd.to_numeric(df_s[total_col].apply(_to_num), errors="coerce")
-    if float_col:
-        df_s[float_col] = pd.to_numeric(df_s[float_col].apply(_to_num), errors="coerce")
+        # -------------------------------
+        # [3] 주요 컬럼 탐색 + 숫자화
+        # -------------------------------
+        total_col = _find_total_col_in(df_s, bookmark_map)
+        if not total_col or total_col not in df_s.columns:
+            st.info("[POPBOX] 총유권자 컬럼을 찾지 못해 종료"); 
+            st.write({"DF_S_cols": list(df_s.columns)[:50], "bookmark_map": bookmark_map})
+            return
+        ping(f"STEP3: total_col={total_col}")
 
-    region_total = float(df_s[total_col].sum(skipna=True)) if df_s[total_col].notna().any() else 0.0
+        float_col = None
+        for c in df_s.columns:
+            if any(k in str(c) for k in ["유동", "전입", "전출", "유출입", "floating"]):
+                float_col = c; break
+        ping(f"STEP3b: float_col={float_col}")
 
-    # -------------------------------
-    # [4] 10개 평균 계산
-    # -------------------------------
-    avg_total = None
-    if not df_a.empty:
-        total_col_a = _find_total_col_in(df_a, bookmark_map)
-        region_key_a = _find_region_key(df_a, bookmark_map)
+        df_s[total_col] = pd.to_numeric(df_s[total_col].apply(_to_num), errors="coerce")
+        if float_col:
+            df_s[float_col] = pd.to_numeric(df_s[float_col].apply(_to_num), errors="coerce")
+        region_total = float(df_s[total_col].sum(skipna=True)) if df_s[total_col].notna().any() else 0.0
+        ping(f"STEP3c: region_total={region_total}")
 
-        if total_col_a:
-            a_vals = pd.to_numeric(df_a[total_col_a].apply(_to_num), errors="coerce")
+        # -------------------------------
+        # [4] 평균 계산(구 단위 합계의 평균)
+        # -------------------------------
+        avg_total = None
+        total_col_a, region_key_a = None, None
+        if not df_a.empty:
+            total_col_a  = _find_total_col_in(df_a, bookmark_map)
+            region_key_a = _find_region_key(df_a, bookmark_map)
+            ping(f"STEP4a: total_col_a={total_col_a}, region_key_a={region_key_a}")
 
-            if region_key_a and region_key_a in df_a.columns:
-                grp = (
-                    df_a[[region_key_a, total_col_a]]
-                    .assign(**{total_col_a: a_vals})
-                    .groupby(region_key_a, dropna=False)[total_col_a]
-                    .sum(min_count=1)
+            if total_col_a:
+                a_vals = pd.to_numeric(df_a[total_col_a].apply(_to_num), errors="coerce")
+                if region_key_a and region_key_a in df_a.columns:
+                    grp = (
+                        df_a[[region_key_a, total_col_a]]
+                        .assign(**{total_col_a: a_vals})
+                        .groupby(region_key_a, dropna=False)[total_col_a]
+                        .sum(min_count=1)
+                    )
+                    avg_total = float(grp.mean(skipna=True)) if grp.notna().any() else None
+                else:
+                    avg_total = float(a_vals.mean(skipna=True)) if a_vals.notna().any() else None
+
+        if avg_total is None:
+            st.info("ℹ️ 평균 계산용 컬럼(총유권자/지역코드)을 못 찾아 단일 막대 표시")
+        ping(f"STEP4b: avg_total={avg_total}")
+
+        # -------------------------------
+        # [5] KPI
+        # -------------------------------
+        c1, c2 = st.columns(2)
+        with c1:
+            st.markdown(
+                f"""
+                <div style="text-align:center;">
+                  <div style="color:#6B7280; font-weight:600; margin-bottom:4px;">전체 유권자 수</div>
+                  <div style="font-weight:800; color:#111827;">{int(round(max(region_total,0))):,}명</div>
+                </div>
+                """, unsafe_allow_html=True
+            )
+        with c2:
+            floating_value_txt = "N/A"
+            if float_col and float_col in df_s.columns and df_s[float_col].notna().any():
+                floating_value_txt = f"{int(round(float(df_s[float_col].sum()))):,}명"
+            st.markdown(
+                f"""
+                <div style="text-align:center;">
+                  <div style="color:#6B7280; font-weight:600; margin-bottom:4px;">유동인구</div>
+                  <div style="font-weight:800; color:#111827;">{floating_value_txt}</div>
+                </div>
+                """, unsafe_allow_html=True
+            )
+        ping("STEP5: KPI rendered")
+
+        # -------------------------------
+        # [6] 차트 데이터 & 렌더
+        # -------------------------------
+        if isinstance(avg_total, (int, float)) and np.isfinite(avg_total) and (avg_total > 0):
+            bar_df = pd.DataFrame({"label": ["해당 지역", "10개 평균"], "value": [region_total, avg_total]})
+            x_max = max(region_total, avg_total) * 1.1
+        else:
+            bar_df = pd.DataFrame({"label": ["해당 지역"], "value": [region_total]})
+            x_max = region_total * 1.1 if region_total > 0 else 1.0
+
+        bar_df["color"] = bar_df["label"].map(lambda x: "#3498DB" if x=="해당 지역" else "#95A5A6")
+        ping(f"STEP6a: bar_df_ready rows={len(bar_df)}, x_max={x_max}")
+
+        try:
+            chart = (
+                alt.Chart(bar_df)
+                .mark_bar()
+                .encode(
+                    y=alt.Y("label:N", title=None, axis=alt.Axis(labels=True, ticks=False)),
+                    x=alt.X("value:Q", title=None, axis=alt.Axis(format="~,"), scale=alt.Scale(domain=[0, x_max], nice=False)),
+                    color=alt.Color("color:N", scale=None, legend=None),
+                    tooltip=[alt.Tooltip("label:N", title="구분"), alt.Tooltip("value:Q", title="유권자수", format=",.0f")],
                 )
-                avg_total = float(grp.mean(skipna=True)) if grp.notna().any() else None
-            else:
-                avg_total = float(a_vals.mean(skipna=True)) if a_vals.notna().any() else None
+                .properties(height=170, padding={"left":0, "right":0, "top":4, "bottom":2})
+                .configure_view(stroke=None)
+            )
+            _ = chart.to_dict()  # spec sanity
+            st.altair_chart(chart, use_container_width=True, theme=None)
+            ping("STEP6b: altair rendered")
+        except Exception as e_alt:
+            ping("STEP6b: altair FAILED, fallback st.bar_chart")
+            st.warning("[POPBOX] Altair 렌더 실패 → st.bar_chart 폴백")
+            st.exception(e_alt)
+            try:
+                st.bar_chart(bar_df.set_index("label")["value"])
+                ping("STEP6c: fallback rendered")
+            except Exception as e_fb:
+                ping("STEP6c: fallback FAILED")
+                st.exception(e_fb)
 
-    if avg_total is None:
-        st.info("ℹ️ 평균 계산을 위해 필요한 컬럼(총유권자/지역코드)을 찾지 못해 '해당 지역' 단일 막대만 표시합니다.")
-
-    # -------------------------------
-    # [5] 상단 KPI 표시
-    # -------------------------------
-    c1, c2 = st.columns(2)
-    with c1:
-        st.markdown(
-            f"""
-            <div style="text-align:center;">
-              <div style="color:#6B7280; font-weight:600; margin-bottom:4px;">전체 유권자 수</div>
-              <div style="font-weight:800; color:#111827;">{int(round(max(region_total,0))):,}명</div>
-            </div>
-            """, unsafe_allow_html=True
-        )
-    with c2:
-        floating_value_txt = "N/A"
-        if float_col and float_col in df_s.columns and df_s[float_col].notna().any():
-            floating_value_txt = f"{int(round(float(df_s[float_col].sum()))):,}명"
-        st.markdown(
-            f"""
-            <div style="text-align:center;">
-              <div style="color:#6B7280; font-weight:600; margin-bottom:4px;">유동인구</div>
-              <div style="font-weight:800; color:#111827;">{floating_value_txt}</div>
-            </div>
-            """, unsafe_allow_html=True
-        )
-
-    # -------------------------------
-    # [6] 막대 차트 생성
-    # -------------------------------
-    if isinstance(avg_total, (int, float)) and pd.notna(avg_total) and avg_total > 0:
-        bar_df = pd.DataFrame({"label": ["해당 지역", "10개 평균"], "value": [region_total, avg_total]})
-        x_max = max(region_total, avg_total) * 1.1
-    else:
-        bar_df = pd.DataFrame({"label": ["해당 지역"], "value": [region_total]})
-        x_max = region_total * 1.1 if region_total > 0 else 1.0
-
-    color_map = {"해당 지역": COLOR_BLUE, "10개 평균": COLOR_GRAY}
-    bar_df["color"] = bar_df["label"].map(lambda x: color_map.get(x, COLOR_GRAY))
-
-    chart = (
-        alt.Chart(bar_df)
-        .mark_bar()
-        .encode(
-            y=alt.Y("label:N", title=None, axis=alt.Axis(labels=True, ticks=False)),
-            x=alt.X("value:Q", title=None, axis=alt.Axis(format="~,"), scale=alt.Scale(domain=[0, x_max], nice=False)),
-            color=alt.Color("color:N", scale=None, legend=None),
-            tooltip=[alt.Tooltip("label:N", title="구분"), alt.Tooltip("value:Q", title="유권자수", format=",.0f")],
-        )
-        .properties(height=170, padding={"left":0, "right":0, "top":4, "bottom":2})
-        .configure_view(stroke=None)
-    )
-    st.altair_chart(chart, use_container_width=True, theme=None)
+    except Exception as e:
+        # 최상위 예외도 화면에 남김
+        st.error(f"[POPBOX {ts}] 최상위 예외 발생")
+        st.exception(e)
+    finally:
+        # 항상 로그/진단 정보 출력
+        st.markdown("—")
+        st.write({"POPBOX_LOG": log})
 
 # =========================================================
 # Age Composition (Half donut)
@@ -845,6 +885,7 @@ def render_region_detail_layout(
             render_incumbent_card(df_cur_sel)
         with c3.container(height="stretch"):
             render_prg_party_box(df_idx_sel, df_idx_all=df_idx_all)
+
 
 
 
