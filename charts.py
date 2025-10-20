@@ -11,11 +11,11 @@ import streamlit as st
 import altair as alt
 from metrics import compute_24_gap
 
-
 # Preferred brand-ish blues/greys for KPI/mini elements
 COLOR_BLUE = "#3498DB"   # TUNE: main accent blue
 COLOR_GRAY = "#95A5A6"   # TUNE: neutral grey
 
+# Altair setup
 alt.data_transformers.disable_max_rows()
 
 # -----------------------------
@@ -248,7 +248,8 @@ def render_population_box(
 
 # =========================================================
 # Age Composition (Half donut)
-# TUNE: inner/outer radius, fonts, center offsets, chart width/height.
+# TUNE: inner/outer radius (fixed px), fonts, chart height.
+# NOTE: Keep only donut + centered texts; remove axes/grids completely.
 # =========================================================
 def render_age_highlight_chart(pop_sel: pd.DataFrame, *, bookmark_map: dict | None = None, box_height_px: int = 240):
     # -----------------------------
@@ -307,8 +308,7 @@ def render_age_highlight_chart(pop_sel: pd.DataFrame, *, bookmark_map: dict | No
     mid_60_64 = max(0.0, tot - (y + m + o))
 
     # -----------------------------
-    # [Ordering & ratios]
-    # - Keep fixed order: 청년층 → 중년층 → 60–64세 → 고령층
+    # [Ordering & ratios] – Fixed order: Y → M → 60–64 → O
     # -----------------------------
     labels_order = [Y, M, "60–64세", O]
     values      = [y, m, mid_60_64, o]
@@ -316,16 +316,16 @@ def render_age_highlight_chart(pop_sel: pd.DataFrame, *, bookmark_map: dict | No
     ratios100   = [r * 100 for r in ratios01]
 
     # -----------------------------
-    # [Focus selector]
+    # [Focus selector] – simple & stable
     # -----------------------------
     focus = st.radio("강조", [Y, M, O], index=0, horizontal=True, label_visibility="collapsed")
     st.markdown("<div style='height: 6px;'></div>", unsafe_allow_html=True)
 
     # -----------------------------
-    # [Sizing knobs]  # TUNE: edit radii/height for look & feel
+    # [Sizing] – responsive width, fixed height
     # -----------------------------
-    inner_r, outer_r = 70, 110         # TUNE: donut radii
-    H = max(220, int(box_height_px))   # TUNE: chart height (px)
+    H = max(220, int(box_height_px))  # TUNE: chart height (px)
+    inner_r, outer_r = 70, 110        # TUNE: donut radii (px)
 
     # -----------------------------
     # [Vis dataframe]
@@ -340,8 +340,7 @@ def render_age_highlight_chart(pop_sel: pd.DataFrame, *, bookmark_map: dict | No
     })
 
     # -----------------------------
-    # [Donut (half)]
-    # - All layers use width="container" & height=H for consistency.
+    # [Donut (half)] – no grids/axes
     # -----------------------------
     base = (
         alt.Chart(df_vis, width="container", height=H)
@@ -362,46 +361,47 @@ def render_age_highlight_chart(pop_sel: pd.DataFrame, *, bookmark_map: dict | No
     )
 
     # -----------------------------
-    # [Center texts] (responsive)
-    # - Use signals 'width'/'height' via transform_calculate so x/y follow container size.
-    # - Keep all layers width="container", height=H to avoid Altair "inconsistent values" errors.
+    # [Center texts] – use view signals; axes disabled to avoid grids
     # -----------------------------
-    label_map = {
-        Y: "청년층(18~39세)",
-        M: "중년층(40~59세)",
-        O: "고령층(65세 이상)",
-    }
+    label_map = {Y: "청년층(18~39세)", M: "중년층(40~59세)", O: "고령층(65세 이상)"}
     idx = labels_order.index(focus)
     pct_txt = f"{(ratios100[idx]):.2f}%"
     lbl_txt = label_map.get(focus, focus)
 
     center_df = pd.DataFrame({"pct": [pct_txt], "lbl": [lbl_txt]})
-
     NUM_FONT, LBL_FONT = 28, 14  # TUNE: center text sizes
 
     num_text = (
         alt.Chart(center_df, width="container", height=H)
-        .transform_calculate(cx="width/2", cy="height/2")  # responsive center
+        .transform_calculate(cx="width/2", cy="height/2")
         .mark_text(fontWeight="bold", fontSize=NUM_FONT, color="#0f172a")
-        .encode(text="pct:N", x=alt.X("cx:Q"), y=alt.Y("cy:Q"))
+        .encode(
+            text="pct:N",
+            x=alt.X("cx:Q", axis=None),  # NOTE: axis None → no grid/labels
+            y=alt.Y("cy:Q", axis=None),
+        )
     )
 
     lbl_text = (
         alt.Chart(center_df, width="container", height=H)
         .transform_calculate(cx="width/2", cy="height/2")
-        .mark_text(fontSize=LBL_FONT, color="#475569", baseline="top", dy=22)  # TUNE: vertical gap under number
-        .encode(text="lbl:N", x=alt.X("cx:Q"), y=alt.Y("cy:Q"))
+        .mark_text(fontSize=LBL_FONT, color="#475569", baseline="top", dy=22)
+        .encode(
+            text="lbl:N",
+            x=alt.X("cx:Q", axis=None),  # NOTE: axis None → no grid/labels
+            y=alt.Y("cy:Q", axis=None),
+        )
     )
 
     # -----------------------------
     # [Render]
     # -----------------------------
-    chart = alt.layer(base, num_text, lbl_text).properties(
-        width="container",  # keep consistent
-        height=H,
-        autosize=alt.AutoSizeParams(type="pad")  # TUNE: "fit" also works; "pad" is stable in Streamlit
-    ).configure_view(stroke=None)
-
+    chart = (
+        alt.layer(base, num_text, lbl_text)
+        .properties(width="container", height=H)
+        .configure_view(stroke=None)
+        .configure_axis(grid=False)  # safety: remove any grids
+    )
     st.altair_chart(chart, use_container_width=True, theme=None)
 
 # =========================================================
@@ -467,6 +467,7 @@ def render_sex_ratio_bar(pop_sel: pd.DataFrame, *, bookmark_map: dict | None = N
 # =========================================================
 # Vote trend (keep interactions)
 # TUNE: ORDER_LABELS, legend orientation, line width, point size.
+# NOTE: Removed interval zoom bound to scales on nominal x (schema error).
 # =========================================================
 def render_vote_trend_chart(ts_sel: pd.DataFrame, ts_all: pd.DataFrame | None = None, *, box_height_px: int = 420):
     with st.container(border=True):
@@ -540,8 +541,10 @@ def render_vote_trend_chart(ts_sel: pd.DataFrame, ts_all: pd.DataFrame | None = 
             color=alt.Color("계열:N",
                             scale=alt.Scale(domain=party_order, range=colors),
                             legend=alt.Legend(title=None, orient="top", direction="horizontal", columns=4)),
-            order="__xorder__"  # ✅ Altair 내부 sort index 방지
+            order=alt.Order("__xorder__:O")  # NOTE: explicit order object
         )
+
+        # Interactive hover highlight (safe on nominal x)
         sel = alt.selection_point(fields=["선거명_표시","계열"], nearest=True, on="pointerover", empty=False)
 
         hit = base.mark_circle(size=650, opacity=0).encode(
@@ -559,10 +562,10 @@ def render_vote_trend_chart(ts_sel: pd.DataFrame, ts_all: pd.DataFrame | None = 
                 alt.Tooltip("계열:N", title="계열"),
                 alt.Tooltip("득표율:Q", title="득표율(%)", format=".2f"),
             ]
-        ).transform_filter(sel).properties(tooltip=None)
+        ).transform_filter(sel)
 
-        zoomX = alt.selection_interval(bind='scales', encodings=['x'])
-        chart = (lines + hit + pts).properties(height=box_height_px).add_params(zoomX).configure_view(stroke=None)
+        # NOTE: Removed zoom bound to scales on nominal axis (schema error).
+        chart = (lines + hit + pts).properties(height=box_height_px).configure_view(stroke=None)
         st.altair_chart(chart, use_container_width=True, theme=None)
 
 # =========================================================
@@ -805,8 +808,8 @@ def render_prg_party_box(prg_sel: pd.DataFrame | None, *, df_idx_all: pd.DataFra
                     .encode(
                         x=alt.X(
                             "값:Q",
-                            axis=alt.Axis(title=None, format=".0%", values=[v/100 for v in range(0, 101, 2)]),
-                            scale=alt.Scale(domain=[0, 0.1], nice=False)
+                            axis=alt.Axis(title=None, format=".0%", values=[v/100 for v in range(0, 101, 2)]),  # TUNE: 2% ticks
+                            scale=alt.Scale(domain=[0, 0.1], nice=False)  # TUNE: max 10%
                         ),
                         y=alt.Y("항목:N", title=None, sort=["해당 지역", "10개 평균"]),
                         color=alt.Color("색상:N", scale=None, legend=None),
@@ -864,9 +867,3 @@ def render_region_detail_layout(
             render_incumbent_card(df_cur_sel)
         with c3.container(height="stretch"):
             render_prg_party_box(df_idx_sel, df_idx_all=df_idx_all)
-
-
-
-
-
-
