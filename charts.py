@@ -280,7 +280,7 @@ def render_population_box(
             legend=alt.Legend(title="구분"),
         )
 
-        bars = base.mark_bar(cornerRadiusTop=3, width=50).encode(color=bar_color)
+        bars = base.mark_bar(cornerRadiusEnd=3, width=50).encode(color=bar_color)
 
         text = base.mark_text(
             align="center",
@@ -868,6 +868,7 @@ def render_region_detail_layout(
             render_incumbent_card(df_cur_sel)
         with c3.container(height="stretch"):
             render_prg_party_box(df_idx_sel, df_idx_all=df_idx_all)
+
 
 
 
