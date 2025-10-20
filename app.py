@@ -50,6 +50,18 @@ ABSOLUTE_MAX_SCORES = {
 # ===== Style Configurations (English Comments for Maintainability) =====
 REGION_COL_WIDTH = "150px"  # [Spacing] Fixed width for region name column.
 
+# ---------- [Typography Scale for Summary page only] ----------
+# - Keep subheaders ("결과 요약", "세부 지표별 상세 분석", "지표 설명") unchanged.
+# - Bump general table/body text sizes for readability.
+UI_FONT_TABLE_BASE = 15          # [Typography] base font-size for tables
+UI_FONT_REGION_LABEL = 15        # [Typography] region name text
+UI_FONT_BAR_TEXT = 14            # [Typography] number text over bars
+UI_FONT_DETAIL_CELL = 15         # [Typography] numeric text in detail table
+UI_FONT_HEAD_CELL = 15           # [Typography] header cells in tables
+UI_FONT_DESC_TITLE = 16          # [Typography] bullet item title
+UI_FONT_DESC_BODY = 15           # [Typography] bullet item body
+UI_FONT_DESC_META = 14           # [Typography] bullet item meta
+
 # Fixed highlight rows in Summary table
 FIXED_HIGHLIGHT_REGIONS = ["서울 서대문구갑", "경기 평택시을", "경기 화성시을"]
 FIXED_HIGHLIGHT_ROW_BG = "#FFF9C4"  # [Color] Light yellow row highlight.
@@ -205,7 +217,8 @@ def _bar_cell_factory(score_df: pd.DataFrame, score_cols: list[str], bar_colors:
         try:
             v = float(val)
         except Exception:
-            return f"<span style='font-size:12px;font-weight:600;'>{val}</span>"
+            # [Typography] fall back text uses bumped size
+            return f"<span style='font-size:{UI_FONT_TABLE_BASE}px;font-weight:600;'>{val}</span>"
         if np.isnan(v): return ""
         max_score = ABSOLUTE_MAX_SCORES.get(col, dynamic_maxes.get(col, 1.0))
         max_score = max(1.0, max_score)
@@ -220,7 +233,7 @@ def _bar_cell_factory(score_df: pd.DataFrame, score_cols: list[str], bar_colors:
             f'<div style="position:relative;width:100%;background:{container_bg};height:18px;border-radius:4px;overflow:hidden;min-width:50px;">'
             f'  <div style="width:{pct:.2f}%;height:100%;background:{color}; border-radius:4px 0 0 4px;"></div>'
             f'  <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;'
-            f'font-size:12px;font-weight:600;color:#111827; text-shadow: 0 0 1px #fff;">{formatted_value}</div>'
+            f'font-size:{UI_FONT_BAR_TEXT}px;font-weight:700;color:#111827; text-shadow: 0 0 1px #fff;">{formatted_value}</div>'
             f'</div>'
             f'</div>'
         )
@@ -230,7 +243,7 @@ def _text_only_cell(val: float | object, col_name: str) -> str:
     """Plain numeric cell for detailed table (no bars)."""
     formatted_value = _format_value(val, col_name)
     return (
-        f'<div style="text-align:center; padding: 6px 8px; font-size:13px; font-weight:600; color:#1F2937;">{formatted_value}</div>'
+        f'<div style="text-align:center; padding: 6px 8px; font-size:{UI_FONT_DETAIL_CELL}px; font-weight:700; color:#1F2937;">{formatted_value}</div>'
     )
 
 # ---------- [UPDATED] Minimal indicator description loader ----------
@@ -322,15 +335,22 @@ if menu == "종합":
 
     _bar_cell = _bar_cell_factory(df, score_cols, BAR_COLORS_MAIN)
 
-    st.subheader("결과 요약")
+    st.subheader("결과 요약")  # [Keep as-is] section header size unchanged
 
     # --- Build HTML table for main scoring ('결과 요약') ---
     headers = [label_col] + score_cols
-    thead = f"<th style='text-align:left;padding:6px 8px;white-space:nowrap;width:{REGION_COL_WIDTH};'>지역</th>"
+    thead = (
+        f"<th style='text-align:left;padding:6px 8px;white-space:nowrap;width:{REGION_COL_WIDTH};"
+        f"font-size:{UI_FONT_HEAD_CELL}px;font-weight:800;'>지역</th>"
+    )
     remaining_cols_count = len(score_cols)
     col_width_pct = f"{100 / remaining_cols_count}%" if remaining_cols_count > 0 else "auto"
     thead += "".join(
-        [f"<th style='text-align:center;padding:6px 8px;white-space:nowrap;width:{col_width_pct};'>{h}</th>" for h in score_cols]
+        [
+            f"<th style='text-align:center;padding:6px 8px;white-space:nowrap;width:{col_width_pct};"
+            f"font-size:{UI_FONT_HEAD_CELL}px;font-weight:800;'>{h}</th>"
+            for h in score_cols
+        ]
     )
 
     rows_html = []
@@ -339,7 +359,7 @@ if menu == "종합":
         row_style = f"background-color:{FIXED_HIGHLIGHT_ROW_BG};" if is_fixed_highlight else ""
         cells = [
             f"<td style='padding:6px 8px;white-space:nowrap;width:{REGION_COL_WIDTH};'>"
-            f"<span style='font-size:13px; font-weight:{'700' if is_fixed_highlight else '600'};'>{row[label_col]}</span>"
+            f"<span style='font-size:{UI_FONT_REGION_LABEL}px; font-weight:{'800' if is_fixed_highlight else '700'};'>{row[label_col]}</span>"
             f"</td>"
         ]
         for c in score_cols:
@@ -348,7 +368,7 @@ if menu == "종합":
 
     table_html = (
         "<div style='overflow-x:auto;'>"
-        "<table style='border-collapse:separate;border-spacing:0;width:100%;font-size:13px;'>"
+        f"<table style='border-collapse:separate;border-spacing:0;width:100%;font-size:{UI_FONT_TABLE_BASE}px;'>"
         f"<thead><tr>{thead}</tr></thead>"
         f"<tbody>{''.join(rows_html)}</tbody>"
         "</table>"
@@ -360,7 +380,7 @@ if menu == "종합":
     # 세부 지표별 상세 분석 (Detailed Index Analysis) - Text Only
     # ====================================================================
     st.divider()
-    st.subheader("세부 지표별 상세 분석")
+    st.subheader("세부 지표별 상세 분석")  # [Keep as-is] section header size unchanged
 
     INDICATOR_GROUPS = {
         "유권자환경": ["유권자 수", "유동인구", "고령층 비율", "청년층 비율", "4-50대 비율", "2030여성 비율"],
@@ -399,18 +419,25 @@ if menu == "종합":
                     df_final = df_final.dropna(subset=[label_col_new]).dropna(subset=present_cols, how='all').reset_index(drop=True)
 
                     # --- Detailed table (text only)
-                    thead_new = f"<th style='text-align:left;padding:6px 8px;white-space:nowrap;font-weight:700;width:{REGION_COL_WIDTH};'>지역</th>"
+                    thead_new = (
+                        f"<th style='text-align:left;padding:6px 8px;white-space:nowrap;font-weight:800;"
+                        f"font-size:{UI_FONT_HEAD_CELL}px;width:{REGION_COL_WIDTH};'>지역</th>"
+                    )
                     remaining_cols_count_new = len(present_cols)
                     col_width_pct_new = f"{100 / remaining_cols_count_new}%" if remaining_cols_count_new > 0 else "auto"
                     thead_new += "".join(
-                        [f"<th style='text-align:center;padding:6px 8px;white-space:nowrap;width:{col_width_pct_new};'>{h}</th>" for h in present_cols]
+                        [
+                            f"<th style='text-align:center;padding:6px 8px;white-space:nowrap;width:{col_width_pct_new};"
+                            f"font-size:{UI_FONT_HEAD_CELL}px;font-weight:800;'>{h}</th>"
+                            for h in present_cols
+                        ]
                     )
 
                     rows_html_new = []
                     for _, row in df_final.iterrows():
                         cells = [
                             f"<td style='padding:6px 8px;white-space:nowrap;width:{REGION_COL_WIDTH};'>"
-                            f"<span style='font-size:13px; font-weight:600;'>{row[label_col_new]}</span>"
+                            f"<span style='font-size:{UI_FONT_REGION_LABEL}px; font-weight:700;'>{row[label_col_new]}</span>"
                             f"</td>"
                         ]
                         for c in present_cols:
@@ -419,7 +446,7 @@ if menu == "종합":
 
                     table_html_new = (
                         "<div style='overflow-x:auto;'>"
-                        "<table style='border-collapse:separate;border-spacing:0;width:100%;font-size:13px;'>"
+                        f"<table style='border-collapse:separate;border-spacing:0;width:100%;font-size:{UI_FONT_TABLE_BASE}px;'>"
                         f"<thead><tr>{thead_new}</tr></thead>"
                         f"<tbody>{''.join(rows_html_new)}</tbody>"
                         "</table>"
@@ -431,7 +458,7 @@ if menu == "종합":
                     # Descriptions under the table → BULLETS (not a table)
                     # ============================
                     st.divider()  # [Spacing] separator between data table & descriptions
-                    st.subheader(f"지표 설명 · {selected_group}")
+                    st.subheader(f"지표 설명 · {selected_group}")  # [Keep as-is] subheader itself unchanged
 
                     desc_df = _read_index_desc_csv()
                     if desc_df.empty:
@@ -456,7 +483,7 @@ if menu == "종합":
                                 st.info("현재 탭의 컬럼명과 `index.csv`의 지표명이 일치하지 않습니다. 표기 통일이 필요합니다.")
                                 st.caption(f"탭 컬럼: {', '.join(present_cols)}")
                             else:
-                                # Build bullet list HTML (no scroll, bigger fonts)
+                                # Build bullet list HTML (bigger fonts, no scroll)
                                 items = []
                                 for _, r in matched.sort_values(by=[name_col]).iterrows():
                                     nm  = str(r.get(name_col, "")).strip()
@@ -470,25 +497,25 @@ if menu == "종합":
                                     meta = " · ".join(meta_parts)
 
                                     items.append(f"""
-                                        <li style="margin:0 0 12px 0;">
+                                        <li style="margin:0 0 14px 0;">
                                           <div>
-                                            <!-- [Typography] indicator name: slightly smaller than body -->
-                                            <div style="font-weight:700; font-size:14px; line-height:1.25; color:#111827;">{nm}</div>
-                                            {'<div style="margin-top:4px; font-size:14px; line-height:1.55; color:#111827;">' + ds + '</div>' if ds else ''}
-                                            {'<div style="margin-top:4px; font-size:13px; line-height:1.45; color:#374151;">' + meta + '</div>' if meta else ''}
+                                            <!-- [Typography] indicator name -->
+                                            <div style="font-weight:800; font-size:{UI_FONT_DESC_TITLE}px; line-height:1.25; color:#111827;">{nm}</div>
+                                            {'<div style="margin-top:6px; font-size:' + str(UI_FONT_DESC_BODY) + 'px; line-height:1.6; color:#111827;">' + ds + '</div>' if ds else ''}
+                                            {'<div style="margin-top:6px; font-size:' + str(UI_FONT_DESC_META) + 'px; line-height:1.45; color:#374151;">' + meta + '</div>' if meta else ''}
                                           </div>
                                         </li>
                                     """)
 
                                 html_bullets = f"""
-                                <div style="padding:4px 2px 8px 2px;">
+                                <div style="padding:6px 2px 10px 2px;">
                                   <ul style="margin:0; padding-left:18px; list-style-type:disc;">
                                     {''.join(items)}
                                   </ul>
                                 </div>
                                 """
-                                # [Height] make tall enough to avoid scroll; simple linear heuristic
-                                computed_height = 120 + 60 * len(items)  # [Spacing] increase per-item if lines wrap a lot
+                                # [Height] heuristic: slightly taller per item to avoid scroll with larger fonts
+                                computed_height = 140 + 70 * len(items)  # [How to change later] increase constants if still clipping
                                 components.html(html_bullets, height=computed_height, scrolling=False)
 
             else:
