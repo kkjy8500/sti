@@ -540,9 +540,8 @@ def render_vote_trend_chart(ts_sel: pd.DataFrame, ts_all: pd.DataFrame | None = 
             color=alt.Color("계열:N",
                             scale=alt.Scale(domain=party_order, range=colors),
                             legend=alt.Legend(title=None, orient="top", direction="horizontal", columns=4)),
-            detail="계열:N"
+            order="__xorder__"  # ✅ Altair 내부 sort index 방지
         )
-
         sel = alt.selection_point(fields=["선거명_표시","계열"], nearest=True, on="pointerover", empty=False)
 
         hit = base.mark_circle(size=650, opacity=0).encode(
@@ -555,11 +554,12 @@ def render_vote_trend_chart(ts_sel: pd.DataFrame, ts_all: pd.DataFrame | None = 
             x=x_shared, y="득표율:Q",
             color=alt.Color("계열:N", scale=alt.Scale(domain=party_order, range=colors), legend=None),
             opacity=alt.condition(sel, alt.value(1), alt.value(0)),
-            detail="계열:N",
-            tooltip=[alt.Tooltip("선거명_표시:N", title="선거명"),
-                     alt.Tooltip("계열:N", title="계열"),
-                     alt.Tooltip("득표율:Q", title="득표율(%)", format=".2f")]
-        ).transform_filter(sel)
+            tooltip=[
+                alt.Tooltip("선거명_표시:N", title="선거명"),
+                alt.Tooltip("계열:N", title="계열"),
+                alt.Tooltip("득표율:Q", title="득표율(%)", format=".2f"),
+            ]
+        ).transform_filter(sel).properties(tooltip=None)
 
         zoomX = alt.selection_interval(bind='scales', encodings=['x'])
         chart = (lines + hit + pts).properties(height=box_height_px).add_params(zoomX).configure_view(stroke=None)
@@ -864,6 +864,7 @@ def render_region_detail_layout(
             render_incumbent_card(df_cur_sel)
         with c3.container(height="stretch"):
             render_prg_party_box(df_idx_sel, df_idx_all=df_idx_all)
+
 
 
 
