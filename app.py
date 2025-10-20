@@ -110,39 +110,6 @@ def _read_markdown_cached(path_str: str) -> str | None:
         except Exception:
             return None
 
-# NEW FUNCTION: Load indicator descriptions from sti/index.csv
-@st.cache_data(show_spinner=False)
-def _load_indicator_descriptions(data_dir: Path) -> dict[str, str]:
-    """
-    Loads indicator name and description from sti/index.csv.
-    Expected headers: 지표명, 설명, 상관관계, 가중치
-    Returns: {지표명: 설명}
-    """
-    # FIX: Use Path concatenation for robustness
-    index_path = data_dir / "sti" / "index.csv" 
-    if not index_path.exists():
-        st.warning(f"지표 설명 파일 '{index_path}'을 찾을 수 없습니다.")
-        return {}
-    
-    try:
-        df = pd.read_csv(index_path, encoding="utf-8-sig")
-        # 정규화된 컬럼명
-        df = _normalize_columns(df) 
-        
-        # '지표명'과 '설명' 컬럼이 모두 있는지 확인
-        if "지표명" in df.columns and "설명" in df.columns:
-            # 결측값이 있는 행 제거 후 딕셔너리 생성
-            descriptions = df.dropna(subset=["지표명", "설명"]).set_index("지표명")["설명"].to_dict()
-            return descriptions
-        else:
-            st.error("지표 설명 파일(index.csv)에 '지표명' 또는 '설명' 컬럼이 없습니다.")
-            return {}
-            
-    except Exception as e:
-        st.error(f"지표 설명 파일 로드 중 오류 발생: {e}")
-        return {}
-
-
 CODE_CANDIDATES = ["코드", "지역구코드", "선거구코드", "지역코드", "code", "CODE"]
 NAME_CANDIDATES = ["지역구", "선거구", "선거구명", "지역명", "district", "지역구명", "region", "지역"]
 SIDO_CANDIDATES = ["시/도", "시도", "광역", "sido", "province"]
@@ -257,6 +224,8 @@ def _format_value(val: float | object, col_name: str) -> str:
         return str(val)
 
     # Heuristic for Count-like data (should use comma)
+    # MODIFICATION 3: Added "유동성A", "유동성B" to count_names for integer formatting.
+    # Also includes "진보당 지방선거 후보 수" for integer formatting.
     count_names = ["유권자 수", "유동인구", "진보당 당원수", "진보당 지방선거 후보 수", "유동성A", "유동성B"]
     if col_name in count_names:
         # Rounds to nearest int and applies comma format
@@ -377,9 +346,6 @@ with st.spinner("데이터 불러오는 중..."):
     df_24    = ensure_code_col(load_results_2024(DATA_DIR))
     df_curr  = ensure_code_col(load_current_info(DATA_DIR))
     df_idx   = ensure_code_col(load_index_sample(DATA_DIR))
-    # NEW: Load indicator descriptions
-    indicator_descriptions = _load_indicator_descriptions(DATA_DIR)
-
 
 # --------------------------------
 # Page: 종합 (Summary Dashboard)
@@ -427,6 +393,7 @@ if menu == "종합":
         f"지역</th>" 
     )
     # Remaining headers (Calculates equal width based on column count, CENTER-ALIGNED)
+    # MODIFICATION 1: Changed text-align to 'center' for score headers
     remaining_cols_count = len(score_cols)
     col_width_pct = f"{100 / remaining_cols_count}%" if remaining_cols_count > 0 else "auto"
     
@@ -474,10 +441,11 @@ if menu == "종합":
     # ====================================================================
     # 세부 지표별 상세 분석 (Detailed Index Analysis) - Text Only
     # ====================================================================
-    st.divider() # NEW: Divider before the detailed analysis section
+    st.divider()
     st.subheader("세부 지표별 상세 분석")
 
     # Indicator Groups Definition
+    # MODIFICATION 2: Added "진보당 지방선거 후보 수" to '주체역량'
     INDICATOR_GROUPS = {
         "유권자환경": ["유권자 수", "유동인구", "고령층 비율", "청년층 비율", "4-50대 비율", "2030여성 비율"],
         "정치지형": ["유동성A", "경합도A", "유동성B", "경합도B"],
@@ -493,23 +461,6 @@ if menu == "종합":
         with tab:
             target_cols = INDICATOR_GROUPS.get(selected_group, [])
             
-            # NEW: Add divider and indicator descriptions
-            st.divider() 
-            
-            description_list = []
-            for col_name in target_cols:
-                # 지표 설명 딕셔너리에서 해당 지표의 설명을 찾습니다.
-                description = indicator_descriptions.get(col_name)
-                if description:
-                    # 마크다운 불렛 리스트 형식으로 저장
-                    description_list.append(f"* **{col_name}**: {description}")
-            
-            if description_list:
-                st.markdown("\n".join(description_list))
-            else:
-                st.info("선택된 그룹에 대한 지표 설명이 `sti/index.csv`에서 발견되지 않았습니다.")
-
-            # --- Detailed Data Table Rendering ---
             if not df_idx.empty and target_cols:
                 df_idx_norm = _normalize_columns(df_idx)
                 
@@ -527,6 +478,7 @@ if menu == "종합":
                 present_cols = [c for c in target_cols if c in df_display.columns]
                 
                 if not present_cols:
+                    # NOTE: This message will appear if '진보당 지방선거 후보 수' is missing from index_sample.csv
                     st.info(f"선택된 그룹 ({selected_group})에 해당하는 컬럼이 데이터에 없습니다.")
                 else:
                     df_final = df_display.loc[:, [label_col_new, "코드"] + present_cols].copy()
@@ -584,9 +536,11 @@ if menu == "종합":
 
                     st.markdown(table_html_new, unsafe_allow_html=True)
 
-            elif df_idx.empty:
-                st.info("`index_sample.csv` 데이터프레임이 비어 있어 상세 분석을 렌더링할 수 없습니다.")
-
+            else:
+                if df_idx.empty:
+                    st.info("`index_sample.csv` 데이터프레임이 비어 있어 상세 분석을 렌더링할 수 없습니다.")
+                else:
+                     st.info(f"선택된 그룹 ({selected_group})에 표시할 컬럼이 없습니다. (데이터 컬럼명 확인 필요)")
 
 # --------------------------------
 # Page: 지역별 분석 (Regional Detail Analysis)
