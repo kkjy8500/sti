@@ -113,8 +113,8 @@ def render_population_box(
     *,
     df_pop_all: pd.DataFrame,
     bookmark_map: dict | None = None,
-    box_height_px: int = 170,  # TUNE: Chart container height (pixels)
-    SHOW_DEBUG: bool = False,  # set True when diagnosing
+    box_height_px: int = 170, # TUNE: Chart container height reference (pixels)
+    SHOW_DEBUG: bool = False, # set True when diagnosing
 ):
     if pop_sel is None or pop_sel.empty:
         st.info("인구 데이터가 없습니다."); return
@@ -160,7 +160,7 @@ def render_population_box(
 
     total_col = _find_total_col_in(df_s, bookmark_map)
     region_key_s = _find_region_key(df_s, bookmark_map) # Find region key for selected data (df_s)
-    
+
     if not total_col or total_col not in df_s.columns:
         st.info("⚠️ 총유권자 컬럼을 찾지 못했습니다.")
         if SHOW_DEBUG: st.write({"DF_S_cols": list(df_s.columns)})
@@ -171,52 +171,52 @@ def render_population_box(
         if any(k in str(c) for k in ["유동", "전입", "전출", "유출입", "floating"]):
             float_col = c; break
 
-    # ---------- Numeric casting and Region Total calculation ----------
+    # ---------- Numeric casting and Region Total calculation (for KPI) ----------
     df_s[total_col] = pd.to_numeric(df_s[total_col].apply(_to_num), errors="coerce")
     if float_col:
         df_s[float_col] = pd.to_numeric(df_s[float_col].apply(_to_num), errors="coerce")
-    
-    # TUNE: Calculate region_total by grouping by region key (Gu/District level aggregation)
+
+    # Calculate region_total (for selected area KPI)
     region_total = 0.0
     if region_key_s and region_key_s in df_s.columns:
-        # NOTE: Aggregation by region code (Gu level) as requested.
+        # Aggregation by region code (Gu level) as requested for the KPI total.
         grp_s = (
             df_s[[region_key_s, total_col]]
             .groupby(region_key_s, dropna=False)[total_col]
             .sum(min_count=1)
         )
         if grp_s.notna().any():
-            # Summing the grouped results to get the total population for the selected area.
             region_total = float(grp_s.sum(skipna=True))
     else:
-        # Fallback to simple sum if region key is missing (original logic)
-        # TUNE: This sums all rows in the selected data, assuming it's already filtered to the region.
+        # Fallback to simple sum if region key is missing
         if df_s[total_col].notna().any():
              region_total = float(df_s[total_col].sum(skipna=True))
              if SHOW_DEBUG: st.warning(f"Region key not found in df_s. Falling back to simple sum.")
 
-    # ---------- Compute 10-avg (district-level mean) ----------
+    # ---------- Compute avg_total & regional data for chart (from all data df_a) ----------
     avg_total = None
-    if not df_a.empty:
-        total_col_a  = _find_total_col_in(df_a, bookmark_map)
-        region_key_a = _find_region_key(df_a, bookmark_map)
-        if total_col_a:
-            a_vals = pd.to_numeric(df_a[total_col_a].apply(_to_num), errors="coerce")
-            if region_key_a and region_key_a in df_a.columns:
-                grp = (
-                    df_a[[region_key_a, total_col_a]]
-                    .assign(**{total_col_a: a_vals})
-                    .groupby(region_key_a, dropna=False)[total_col_a]
-                    .sum(min_count=1)
-                )
-                # Calculate the mean across the groups (regional means)
-                avg_total = float(grp.mean(skipna=True)) if grp.notna().any() else None
-            else:
-                avg_total = float(a_vals.mean(skipna=True)) if a_vals.notna().any() else None
+    grp = None # Initialize grp for scope
+    total_col_a = _find_total_col_in(df_a, bookmark_map)
+    region_key_a = _find_region_key(df_a, bookmark_map)
 
-    # ---------- KPI (top) ----------
+    if not df_a.empty and total_col_a and region_key_a:
+        a_vals = pd.to_numeric(df_a[total_col_a].apply(_to_num), errors="coerce")
+        if region_key_a in df_a.columns:
+            # Group all data (df_a) by region key (Gu level) and sum the voters
+            grp = (
+                df_a[[region_key_a, total_col_a]]
+                .assign(**{total_col_a: a_vals})
+                .groupby(region_key_a, dropna=False)[total_col_a]
+                .sum(min_count=1)
+            )
+            # Calculate the overall mean across the regional sums (10 regions' average)
+            avg_total = float(grp.mean(skipna=True)) if grp.notna().any() else None
+
+    # ---------- KPI (top) rendering ----------
+    st.markdown("<!-- TUNE: Top section padding/margin -->", unsafe_allow_html=True)
     c1, c2 = st.columns(2)
     with c1:
+        # TUNE: Color of KPI label (Gray) and value (Dark Gray)
         st.markdown(
             f"""
             <div style="text-align:center;">
@@ -239,65 +239,99 @@ def render_population_box(
             """, unsafe_allow_html=True
         )
 
-    # ---------- Bar data ----------
-    if isinstance(avg_total, (int, float)) and math.isfinite(avg_total) and (avg_total > 0):
-        bar_df = pd.DataFrame({"label": ["해당 지역", "10개 평균"], "value": [region_total, avg_total]})
-    else:
-        # NOTE: If avg_total is invalid or zero, only show the current region bar.
-        bar_df = pd.DataFrame({"label": ["해당 지역"], "value": [region_total]})
-    bar_df["color"] = bar_df["label"].map(lambda x: COLOR_BLUE if x=="해당 지역" else COLOR_GRAY)
-
-    # TUNE: Bar Chart Configuration (Vertical)
-    # The quantitative axis is now Y, the categorical axis is X.
-
-    # Y-axis maximum calculation (quantitative axis with headroom)
-    y_max = float(bar_df["value"].max()) if len(bar_df) else 1.0
-    if (not math.isfinite(y_max)) or (y_max <= 0): y_max = 1.0
-    y_max *= 1.1 # TUNE: Add 10% headroom to the quantitative axis scale for visual space
-
-    chart = (
-        alt.Chart(bar_df)
-        .mark_bar()  # TUNE: Removed fixed width for auto-sizing (responsive bar width)
-        .encode(
-            # X-axis for Categories (Labels)
-            x=alt.X(
-                "label:N",
-                title=None,
-                # TUNE: Ensure labels are shown horizontally (labelAngle=0) and spaced slightly from axis line
-                axis=alt.Axis(labels=True, labelAngle=0, labelPadding=10)
-            ),
-            # Y-axis for Quantitative Values
-            y=alt.Y(
-                "value:Q",
-                title=None,
-                # TUNE: Use comma separation for large numbers on Y-axis
-                axis=alt.Axis(format="~,", labelBound=True),
-                # TUNE: Set the domain from 0 to y_max with nice=False for precise control
-                scale=alt.Scale(domain=[0, y_max], nice=False)
-            ),
-            # TUNE: Color for bars, mapped from bar_df["color"]
-            color=alt.Color("color:N", scale=None, legend=None),
-            tooltip=[
-                alt.Tooltip("label:N", title="구분"),
-                # TUNE: Tooltip format for large numbers (no decimals)
-                alt.Tooltip("value:Q", title="유권자수", format=",.0f"),
-            ],
+    # ---------- Vertical Bar Chart (Gu-level comparison) ----------
+    if grp is not None and avg_total is not None:
+        regional_voter_totals = grp.sort_values(ascending=False).dropna()
+        
+        # 1. Select all available regions (assuming total <= 10, as specified by user)
+        # TUNE: Removed .head(10) to display all available Gu/District data.
+        df_chart = regional_voter_totals.reset_index(name='VoterCount')
+        df_chart.rename(columns={region_key_a: 'Region'}, inplace=True)
+        
+        # 2. Identify the selected region name for highlighting
+        current_selected_gu_name = None
+        if region_key_s and region_key_s in df_s.columns:
+            unique_regions_s = df_s[region_key_s].unique()
+            # If the selected data corresponds to a single region key
+            if len(unique_regions_s) == 1 and str(unique_regions_s[0]) in df_chart['Region'].astype(str).values:
+                current_selected_gu_name = unique_regions_s[0]
+        
+        # 3. Add highlight column
+        df_chart['Highlight'] = df_chart['Region'].apply(
+            lambda x: "Selected" if x == current_selected_gu_name else "Other"
         )
-        # TUNE: Set chart height and padding for the overall container
-        .properties(height=box_height_px, padding={"left": 0, "right": 0, "top": 4, "bottom": 2})
-        .configure_view(stroke=None) # Remove border around the chart area
-    )
-    st.altair_chart(chart, use_container_width=True, theme=None)
+        # Ensure the selected region (if present) is kept in the display order (descending by count)
+        df_chart = df_chart.sort_values(by='VoterCount', ascending=False)
+        
+        # Define base chart
+        base = alt.Chart(df_chart).encode(
+            # TUNE: Encoding for the X-axis (Region Name). Hide axis title/labels for cleaner look.
+            x=alt.X('Region', axis=None, sort='-y'), 
+            # TUNE: Encoding for the Y-axis (Voter Count). Use short suffix format (~s)
+            y=alt.Y('VoterCount', title='유권자 수 (명)', axis=alt.Axis(format='~s')),
+            # TUNE: Tooltip showing Region and Count, formatted with comma separators
+            tooltip=['Region', alt.Tooltip('VoterCount', format=',.0f', title='유권자 수')],
+        ).properties(
+            title="지역별 유권자 수 (구/자치구 단위)", # TUNE: Updated chart title to reflect full scope
+            height=box_height_px * 1.5, # TUNE: Chart height (adjust for visibility)
+        )
+
+        # Bar color definition
+        bar_color = alt.Color(
+            'Highlight',
+            scale=alt.Scale(range=['#4C78A8', '#F59E0B']), # TUNE: Color palette (Blue for Other, Amber for Selected)
+            legend=None # TUNE: Hide color legend as selection is clear
+        )
+
+        # Bar layer
+        bars = base.mark_bar().encode(
+            color=bar_color 
+        )
+
+        # Average line layer
+        avg_line = alt.Chart(pd.DataFrame({
+            'y_val': [avg_total],
+            'label': ['평균 유권자 수'],
+        })).mark_rule(
+            strokeWidth=2, # TUNE: Thickness of the average line
+            color='#EF4444', # TUNE: Color of the average line (Red)
+            strokeDash=[5, 5] # TUNE: Dash style of the average line
+        ).encode(
+            y='y_val',
+            # TUNE: Tooltip for average line
+            tooltip=[alt.Tooltip('y_val', format=',.0f', title='평균 유권자 수')]
+        )
+
+        # Text label layer (showing value on top of bar)
+        text = base.mark_text(
+            align='center', # TUNE: Text alignment
+            baseline='bottom', # TUNE: Text position relative to bar
+            dy=-5, # TUNE: Vertical offset for text
+            fontWeight=600, # TUNE: Font weight
+        ).encode(
+            text=alt.Text('VoterCount', format='~s'), # Shortened format for count
+            color=alt.value('#1F2937'), # TUNE: Text color (Dark Gray)
+            order=alt.Order('VoterCount', sort='descending') # Ensure text stays with its bar
+        )
+
+        # Combine all parts and render
+        chart = (bars + avg_line + text).resolve_scale(
+            x='independent', # TUNE: X scale independence
+            y='shared' # TUNE: Y scale shared across layers
+        )
+
+        # TUNE: Use full container width for responsiveness
+        st.altair_chart(chart, use_container_width=True) 
+        
+    elif SHOW_DEBUG:
+        st.warning("Chart data or average calculation failed.")
 
     if SHOW_DEBUG:
         st.write({
             "region_total": region_total,
             "avg_total": avg_total,
-            "bar_df_head": bar_df.head(), # TUNE: Changed from head(3) to head() for full debug view
-            "y_max": y_max,
-            "responsive_bars": "True",
+            "regional_data_status": "Chart displayed or data prepared",
         })
-
 # =========================================================
 # Age Composition (Half donut)
 # TUNE: inner/outer radius, fonts, center offsets, chart width/height.
@@ -872,6 +906,7 @@ def render_region_detail_layout(
             render_incumbent_card(df_cur_sel)
         with c3.container(height="stretch"):
             render_prg_party_box(df_idx_sel, df_idx_all=df_idx_all)
+
 
 
 
