@@ -40,7 +40,7 @@ from charts import (
 APP_TITLE = "지역구 선정 1단계 조사 결과"
 DATA_DIR = Path("data")  # [File root] change here if your relative data folder moves.
 
-# Absolute Scaling: Columns listed here will use the specified value as the 100% max score
+# Absolute Scaling
 ABSOLUTE_MAX_SCORES = {
     "합계": 100.0, "유권자환경": 20.0, "정치지형": 20.0, "주체역량": 30.0, "상대역량": 30.0,
     "고령층 비율": 1.0, "청년층 비율": 1.0, "4-50대 비율": 1.0, "2030여성 비율": 1.0,
@@ -456,8 +456,7 @@ if menu == "종합":
                                 st.info("현재 탭의 컬럼명과 `index.csv`의 지표명이 일치하지 않습니다. 표기 통일이 필요합니다.")
                                 st.caption(f"탭 컬럼: {', '.join(present_cols)}")
                             else:
-                                # Build bullet list HTML (lightweight)
-                                # [Typography] indicator name font-size slightly smaller (12.5px)
+                                # Build bullet list HTML (no scroll, bigger fonts)
                                 items = []
                                 for _, r in matched.sort_values(by=[name_col]).iterrows():
                                     nm  = str(r.get(name_col, "")).strip()
@@ -471,24 +470,26 @@ if menu == "종합":
                                     meta = " · ".join(meta_parts)
 
                                     items.append(f"""
-                                        <li style="margin:0 0 10px 0;">
+                                        <li style="margin:0 0 12px 0;">
                                           <div>
-                                            <div style="font-weight:700; font-size:12.5px; line-height:1.2; color:#111827;">{nm}</div>
-                                            {'<div style="margin-top:4px; font-size:13px; color:#1F2937;">' + ds + '</div>' if ds else ''}
-                                            {'<div style="margin-top:4px; font-size:12px; color:#4B5563;">' + meta + '</div>' if meta else ''}
+                                            <!-- [Typography] indicator name: slightly smaller than body -->
+                                            <div style="font-weight:700; font-size:14px; line-height:1.25; color:#111827;">{nm}</div>
+                                            {'<div style="margin-top:4px; font-size:14px; line-height:1.55; color:#111827;">' + ds + '</div>' if ds else ''}
+                                            {'<div style="margin-top:4px; font-size:13px; line-height:1.45; color:#374151;">' + meta + '</div>' if meta else ''}
                                           </div>
                                         </li>
                                     """)
 
                                 html_bullets = f"""
-                                <div style="padding:2px 2px 8px 2px;">
+                                <div style="padding:4px 2px 8px 2px;">
                                   <ul style="margin:0; padding-left:18px; list-style-type:disc;">
                                     {''.join(items)}
                                   </ul>
                                 </div>
                                 """
-                                # [Height] simple heuristic per item; adjust later if needed
-                                components.html(html_bullets, height=min(680, 140 + 40 * len(items)), scrolling=True)
+                                # [Height] make tall enough to avoid scroll; simple linear heuristic
+                                computed_height = 120 + 60 * len(items)  # [Spacing] increase per-item if lines wrap a lot
+                                components.html(html_bullets, height=computed_height, scrolling=False)
 
             else:
                 if df_idx.empty:
