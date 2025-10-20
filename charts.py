@@ -84,6 +84,12 @@ def _render_topbar(page_title: str | None, app_title: str | None):
 
 # =========================================================
 # Population Box – KPI + two-bars (Region vs 10-avg)
+# Key simplifications:
+#  - Removed Scale(range/rangeStep) to avoid vega schema errors.
+#  - Control bar thickness via mark_bar(size=...) only.
+#  - Use math.isfinite instead of numpy (fewer deps).
+#  - Keep numeric fallbacks ultra-safe.
+# TUNE: adjust box_height_px, bar thickness, colors in one place below.
 # =========================================================
 def render_population_box(
     pop_sel: pd.DataFrame,
@@ -202,20 +208,20 @@ def render_population_box(
         bar_df = pd.DataFrame({"label": ["해당 지역"], "value": [region_total]})
     bar_df["color"] = bar_df["label"].map(lambda x: COLOR_BLUE if x=="해당 지역" else COLOR_GRAY)
 
-    # TUNE: bar thickness auto-fit
+    # TUNE: bar thickness auto-fit (no scale.range/rangeStep to avoid schema errors)
     num_cats   = max(1, len(bar_df))
-    inner_pad  = 20  # TUNE: vertical padding
+    inner_pad  = 20                      # TUNE: top/bottom padding reserve (px)
     inner_h    = max(40, int(box_height_px - inner_pad))
-    bar_size   = max(26, min(120, int(inner_h / num_cats)))  # TUNE: bar thickness
+    bar_size   = max(26, min(120, int(inner_h / num_cats)))  # TUNE: min/max thickness (px)
 
-    # TUNE: x-domain headroom
+    # TUNE: x-domain with gentle headroom (avoid 0-width bar when values are tiny)
     x_max = float(bar_df["value"].max()) if len(bar_df) else 1.0
     if (not math.isfinite(x_max)) or (x_max <= 0): x_max = 1.0
     x_max *= 1.1
 
     chart = (
         alt.Chart(bar_df)
-        .mark_bar(size=bar_size)
+        .mark_bar(size=bar_size)  # TUNE: bar thickness only via size
         .encode(
             y=alt.Y("label:N", title=None, axis=alt.Axis(labels=True, ticks=False)),
             x=alt.X("value:Q", title=None, axis=alt.Axis(format="~,", labelBound=True),
@@ -301,8 +307,8 @@ def render_age_highlight_chart(pop_sel: pd.DataFrame, *, bookmark_map: dict | No
     st.markdown("<div style='height: 6px;'></div>", unsafe_allow_html=True)
 
     inner_r, outer_r = 68, 106         # TUNE: donut radii
-    W = 320                              # TUNE: chart width (px)
-    H = max(220, int(box_height_px))     # TUNE: chart height (px)
+    W = 320                             # TUNE: chart width (px)
+    H = max(220, int(box_height_px))    # TUNE: chart height (px)
 
     df_vis = pd.DataFrame({
         "연령": labels_order, "명": values, "비율": ratios01, "표시비율": ratios100,
@@ -316,7 +322,7 @@ def render_age_highlight_chart(pop_sel: pd.DataFrame, *, bookmark_map: dict | No
             theta=alt.Theta("비율:Q", stack=True, sort=None, scale=alt.Scale(range=[-math.pi/2, math.pi/2])),
             order=alt.Order("순서:Q"),
             color=alt.Color("강조:N", scale=alt.Scale(domain=[True, False], range=["#1E6BFF", "#E5E7EB"]), legend=None),
-            tooltip=[
+            tooltip=[  # NOTE: donut tooltip kept
                 alt.Tooltip("연령:N", title="연령대"),
                 alt.Tooltip("명:Q", title="인원", format=",.0f"),
                 alt.Tooltip("표시비율:Q", title="비율(%)", format=".2f"),
@@ -384,7 +390,7 @@ def render_sex_ratio_bar(pop_sel: pd.DataFrame, *, bookmark_map: dict | None = N
     tidy["연령대표시"] = tidy["연령대"].map(label_map)
 
     bar_size = 30  # TUNE: bar thickness (px)
-    tick_values = [0.0, 0.1, 0.2, 0.3]  # TUNE: fixed 10% ticks
+    tick_values = [0.0, 0.1, 0.2, 0.3]  # TUNE: 10% ticks
 
     bars = (
         alt.Chart(tidy)
@@ -394,7 +400,7 @@ def render_sex_ratio_bar(pop_sel: pd.DataFrame, *, bookmark_map: dict | None = N
             x=alt.X(
                 "전체비중:Q",
                 scale=alt.Scale(domain=[0, 0.30]),
-                axis=alt.Axis(format=".0%", title="전체 기준 구성비(%)", values=tick_values, tickMinStep=0.1, grid=True),
+                axis=alt.Axis(format=".0%", title="전체 기준 구성비(%)", values=tick_values, tickMinStep=0.1, grid=True),  # TUNE: 10% ticks
             ),
             color=alt.Color(
                 "성별:N",
@@ -483,24 +489,23 @@ def render_vote_trend_chart(ts_sel: pd.DataFrame, ts_all: pd.DataFrame | None = 
             axis=alt.Axis(labelAngle=-32, labelOverlap=False, labelPadding=20, labelLimit=280, title="선거명")
         )
 
-        # Disable auto-tooltips globally on this layered chart
-        base = alt.Chart(long_df).encode(tooltip=None)  # ✅ block default tooltips for all layers
+        base = alt.Chart(long_df)  # NOTE: don't touch tooltip here
 
-        # Lines: no tooltip; enforce our x-order to avoid internal sort_index
-        lines = base.mark_line(point=False, strokeWidth=2).encode(
+        # Lines: disable default tooltip at mark-level, keep explicit order to avoid internal sort field leakage
+        lines = base.mark_line(point=False, strokeWidth=2, tooltip=False).encode(  # TUNE: line width
             x=x_shared,
             y=alt.Y("득표율:Q", axis=alt.Axis(title="득표율(%)")),
             color=alt.Color("계열:N",
                             scale=alt.Scale(domain=party_order, range=colors),
                             legend=alt.Legend(title=None, orient="top", direction="horizontal", columns=4)),
-            order="__xorder__",  # ✅ prevent Altair internal ordering artifacts
+            order="__xorder__",  # ✅ avoid internal sort_index showing up
         )
 
-        # Selection (for hover reveal)
+        # Selection for hover
         sel = alt.selection_point(fields=["선거명_표시","계열"], nearest=True, on="pointerover", empty=False)
 
-        # Invisible hit targets; still no tooltip due to base encode(tooltip=None)
-        hit = base.mark_circle(size=650, opacity=0).encode(
+        # Invisible hit targets; also disable default tooltip at mark-level
+        hit = base.mark_circle(size=650, opacity=0, tooltip=False).encode(
             x=x_shared, y="득표율:Q",
             color=alt.Color("계열:N", scale=alt.Scale(domain=party_order, range=colors), legend=None),
         ).add_params(sel)
@@ -510,7 +515,7 @@ def render_vote_trend_chart(ts_sel: pd.DataFrame, ts_all: pd.DataFrame | None = 
             x=x_shared, y="득표율:Q",
             color=alt.Color("계열:N", scale=alt.Scale(domain=party_order, range=colors), legend=None),
             opacity=alt.condition(sel, alt.value(1), alt.value(0)),
-            tooltip=[
+            tooltip=[  # ✅ custom-only tooltip (no sort_index)
                 alt.Tooltip("선거명_표시:N", title="선거명"),
                 alt.Tooltip("계열:N", title="계열"),
                 alt.Tooltip("득표율:Q", title="득표율(%)", format=".2f"),
