@@ -241,85 +241,58 @@ def render_population_box(
 
     # ---------- Vertical Bar Chart (Two-Bar Comparison) ----------
     if grp is not None and avg_total is not None and region_total > 0:
-        
-        # 1. Identify the selected region name
-        current_selected_gu_name = "선택 지역 (합산)" 
+        current_selected_gu_name = "선택 지역 (합산)"
         if region_key_s and region_key_s in df_s.columns:
-            unique_regions_s = df_s[region_key_s].unique()
-            # If the selected data corresponds to a single region key, use its name
-            if len(unique_regions_s) == 1:
-                current_selected_gu_name = str(unique_regions_s[0])
+            u = df_s[region_key_s].dropna().unique()
+            if len(u) == 1:
+                current_selected_gu_name = str(u[0])
 
-        # 2. Create the two-bar data frame
+        # 2-bar 데이터프레임 (NaN/inf 방지 및 dtype 명시)
         df_chart = pd.DataFrame({
-            'Category': [current_selected_gu_name, '10개 구 평균'],
-            'VoterCount': [region_total, avg_total],
-            'Highlight': ['Selected', 'Average']
+            "Category": [str(current_selected_gu_name), "10개 구 평균"],
+            "VoterCount": [float(region_total), float(avg_total)],
+            "Highlight": ["Selected", "Average"],
         })
-        
-        # Define requested colors
-        COLOR_BLUE = '#3B82F6'
-        COLOR_GRAY = '#6B7280'
+        df_chart = df_chart.replace([pd.NA, float("inf"), float("-inf")], 0.0)
 
-        # Define the base chart
-        base = alt.Chart(df_chart).encode(
-            # X-axis shows the category (Gu Name or Average)
-            x=alt.X('Category', title=None, axis=alt.Axis(labelAngle=0)), 
-            # Y-axis shows the Voter Count
-            y=alt.Y('VoterCount', title='유권자 수 (명)', axis=alt.Axis(format='~s')),
-            tooltip=[
-                alt.Tooltip('Category', title='구분'), 
-                alt.Tooltip('VoterCount', format=',.0f', title='유권자 수')
-            ]
-        ).properties(
-            title="선택 지역 vs 10개 구 평균 유권자 수",
-            height=box_height_px * 1.5,
+        COLOR_BLUE = "#3B82F6"
+        COLOR_GRAY = "#6B7280"
+
+        base = (
+            alt.Chart(df_chart)
+            .encode(
+                x=alt.X("Category:N", title=None, axis=alt.Axis(labelAngle=0)),
+                y=alt.Y("VoterCount:Q", title="유권자 수 (명)", axis=alt.Axis(format="~s")),
+                tooltip=[
+                    alt.Tooltip("Category:N", title="구분"),
+                    alt.Tooltip("VoterCount:Q", title="유권자 수", format=",.0f"),
+                ],
+            )
+            .properties(
+                title="선택 지역 vs 10개 구 평균 유권자 수",
+                height=int(box_height_px * 1.5),
+            )
         )
 
-        # Bar color definition based on the new 'Highlight' column and custom colors
         bar_color = alt.Color(
-            'Highlight',
-            scale=alt.Scale(domain=['Selected', 'Average'], range=[COLOR_BLUE, COLOR_GRAY]),
-            legend=alt.Legend(title="구분")
+            "Highlight:N",
+            scale=alt.Scale(domain=["Selected", "Average"], range=[COLOR_BLUE, COLOR_GRAY]),
+            legend=alt.Legend(title="구분"),
         )
 
-        # Bar layer
-        bars = base.mark_bar(
-            cornerRadiusTop=3, # Add rounded corners
-            width=50 # Set a fixed width for the two bars
-        ).encode(
-            color=bar_color 
-        )
+        bars = base.mark_bar(cornerRadiusTop=3, width=50).encode(color=bar_color)
 
-        # Text label layer (showing value on top of bar)
         text = base.mark_text(
-            align='center',
-            baseline='bottom',
-            dy=-8, # Adjusted vertical offset for better visibility
-            fontWeight='bold',
-            fontSize=14
-        ).encode(
-            text=alt.Text('VoterCount', format=',.0f'), # Use comma-separated format
-            color=alt.value('#1F2937'),
-        )
+            align="center",
+            baseline="bottom",
+            dy=-8,
+            fontWeight="bold",
+            fontSize=14,
+            color="#1F2937",
+        ).encode(text=alt.Text("VoterCount:Q", format=",.0f"))
 
-        # Combine all parts and render
-        chart = (bars + text).resolve_scale(
-            x='independent',
-            y='shared'
-        )
-
-        st.altair_chart(chart, use_container_width=True) 
-        
-    elif SHOW_DEBUG:
-        st.warning("Chart data or average calculation failed.")
-
-    if SHOW_DEBUG:
-        st.write({
-            "region_total": region_total,
-            "avg_total": avg_total,
-            "regional_data_status": "Chart displayed or data prepared",
-        })
+        chart = bars + text  
+        st.altair_chart(chart, use_container_width=True)
 
 # =========================================================
 # Age Composition (Half donut)
@@ -895,6 +868,7 @@ def render_region_detail_layout(
             render_incumbent_card(df_cur_sel)
         with c3.container(height="stretch"):
             render_prg_party_box(df_idx_sel, df_idx_all=df_idx_all)
+
 
 
 
