@@ -10,6 +10,7 @@ import streamlit as st
 import pandas as pd
 from pathlib import Path
 import numpy as np
+import streamlit.components.v1 as components  # [HTML render] use for raw HTML blocks
 
 # Data Loader Imports (Korean function names are maintained as per the original structure)
 from data_loader import (
@@ -528,7 +529,7 @@ if menu == "종합":
                                 </table>
                             </div>
                             """
-                            st.markdown(html_desc, unsafe_allow_html=True)
+                            components.html(html_desc, height=min(600, 140 + 32 * len(matched)), scrolling=True)
 
             else:
                 if df_idx.empty:
