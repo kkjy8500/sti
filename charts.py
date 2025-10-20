@@ -350,7 +350,8 @@ def render_age_highlight_chart(pop_sel: pd.DataFrame, *, bookmark_map: dict | No
         alt.Chart(df_vis)
         .mark_arc(innerRadius=70, outerRadius=110, cornerRadius=6, stroke="white", strokeWidth=1)
         .encode(
-            theta=alt.Theta("비율:Q", stack=True, sort=None, scale=alt.Scale(range=[-math.pi/2, math.pi/2])),
+            theta=alt.Theta("비율:Q", stack=True, sort=None,
+                            scale=alt.Scale(range=[-math.pi/2, math.pi/2])),
             order=alt.Order("순서:Q"),
             color=alt.Color("강조:N",
                             scale=alt.Scale(domain=[True, False], range=["#1E6BFF", "#E5E7EB"]),
@@ -361,34 +362,35 @@ def render_age_highlight_chart(pop_sel: pd.DataFrame, *, bookmark_map: dict | No
             ],
         )
         .properties(height=box_height_px)
-        .configure_view(stroke=None)
     )
 
-    # --- Center text layers ---
+    # --- Center text ---
     label_map = {Y: "청년층(18~39세)", M: "중년층(40~59세)", O: "고령층(65세 이상)"}
     pct_txt = f"{ratios100[labels.index(focus)]:.2f}%"
     lbl_txt = label_map.get(focus, focus)
 
-    # 시각 중심 위치 (도넛 반지름 기준)
-    center_x = 160
+    cx = 160  # 중심 x좌표
+    cy = box_height_px / 2
 
     num_layer = (
         alt.Chart(pd.DataFrame({"t": [pct_txt]}))
-        .mark_text(fontSize=28, fontWeight="bold", color="#0f172a",
-                   align="center", baseline="middle")
-        .encode(text="t:N", x=alt.value(center_x), y=alt.value(box_height_px / 2))
+        .mark_text(
+            fontSize=28, fontWeight="bold", color="#0f172a",
+            align="center", baseline="middle"
+        )
+        .encode(x=alt.value(cx), y=alt.value(cy), text="t:N")
     )
 
     lbl_layer = (
         alt.Chart(pd.DataFrame({"t": [lbl_txt]}))
-        .mark_text(fontSize=14, color="#475569", align="center", baseline="top")
-        .encode(text="t:N", x=alt.value(center_x), y=alt.value(box_height_px / 2 + 26))
+        .mark_text(
+            fontSize=14, color="#475569", align="center", baseline="top"
+        )
+        .encode(x=alt.value(cx), y=alt.value(cy + 26), text="t:N")
     )
 
-    # --- Combine using "+" (safer than alt.layer for mixed specs) ---
-    final_chart = (
-        donut + num_layer + lbl_layer
-    ).properties(
+    # --- Layer safely ---
+    final_chart = alt.layer(donut, num_layer, lbl_layer).configure_view(stroke=None).properties(
         autosize=alt.AutoSizeParams(type="fit", contains="padding")
     )
 
@@ -875,6 +877,7 @@ def render_region_detail_layout(
             render_incumbent_card(df_cur_sel)
         with c3.container(height="stretch"):
             render_prg_party_box(df_idx_sel, df_idx_all=df_idx_all)
+
 
 
 
