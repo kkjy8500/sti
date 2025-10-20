@@ -83,20 +83,37 @@ def _render_topbar(page_title: str | None, app_title: str | None):
             st.markdown(f"<div style='text-align:right;font-weight:700;font-size:1.05rem;'>🗳️ {app_title}</div>", unsafe_allow_html=True)
 
 # =========================================================
+# --- Dependencies/Constants for Runnability ---
+# Placeholder function for numeric conversion (used in original code)
+def _to_num(v):
+    """Converts value to float, handling common non-numeric formats."""
+    if isinstance(v, (int, float)):
+        return v
+    try:
+        if isinstance(v, str):
+            v = v.replace(",", "").replace("%", "")
+        return float(v)
+    except (ValueError, TypeError):
+        return float('nan')
+
+# TUNE: Bar Colors (ensure they contrast well with the background)
+COLOR_BLUE = "#3B82F6"  # Blue color for the selected region bar
+COLOR_GRAY = "#D1D5DB"  # Gray color for the average/comparison bar
+# =========================================================
+
+
+# =========================================================
 # Population Box – KPI + two-bars (Region vs 10-avg)
-# Key simplifications:
-#  - Removed Scale(range/rangeStep) to avoid vega schema errors.
-#  - Control bar thickness via mark_bar(size=...) only.
-#  - Use math.isfinite instead of numpy (fewer deps).
-#  - Keep numeric fallbacks ultra-safe.
-# TUNE: adjust box_height_px, bar thickness, colors in one place below.
+# Key modifications: Vertical bar chart implemented.
+# - Removed complex bar size calculation.
+# - Switched X and Y encoding for vertical orientation.
 # =========================================================
 def render_population_box(
     pop_sel: pd.DataFrame,
     *,
     df_pop_all: pd.DataFrame,
     bookmark_map: dict | None = None,
-    box_height_px: int = 170,
+    box_height_px: int = 170,  # TUNE: Chart container height (pixels)
     SHOW_DEBUG: bool = False,  # set True when diagnosing
 ):
     if pop_sel is None or pop_sel.empty:
@@ -152,7 +169,7 @@ def render_population_box(
         if any(k in str(c) for k in ["유동", "전입", "전출", "유출입", "floating"]):
             float_col = c; break
 
-    # ---------- Numeric casting ----------
+    # ---------- Numeric casting and Region Total calculation ----------
     df_s[total_col] = pd.to_numeric(df_s[total_col].apply(_to_num), errors="coerce")
     if float_col:
         df_s[float_col] = pd.to_numeric(df_s[float_col].apply(_to_num), errors="coerce")
@@ -172,6 +189,7 @@ def render_population_box(
                     .groupby(region_key_a, dropna=False)[total_col_a]
                     .sum(min_count=1)
                 )
+                # Calculate the mean across the groups (regional means)
                 avg_total = float(grp.mean(skipna=True)) if grp.notna().any() else None
             else:
                 avg_total = float(a_vals.mean(skipna=True)) if a_vals.notna().any() else None
@@ -205,35 +223,51 @@ def render_population_box(
     if isinstance(avg_total, (int, float)) and math.isfinite(avg_total) and (avg_total > 0):
         bar_df = pd.DataFrame({"label": ["해당 지역", "10개 평균"], "value": [region_total, avg_total]})
     else:
+        # NOTE: If avg_total is invalid or zero, only show the current region bar.
         bar_df = pd.DataFrame({"label": ["해당 지역"], "value": [region_total]})
     bar_df["color"] = bar_df["label"].map(lambda x: COLOR_BLUE if x=="해당 지역" else COLOR_GRAY)
 
-    # TUNE: bar thickness auto-fit (no scale.range/rangeStep to avoid schema errors)
-    num_cats   = max(1, len(bar_df))
-    inner_pad  = 20                      # TUNE: top/bottom padding reserve (px)
-    inner_h    = max(40, int(box_height_px - inner_pad))
-    bar_size   = max(26, min(120, int(inner_h / num_cats)))  # TUNE: min/max thickness (px)
+    # TUNE: Bar Chart Configuration (Vertical)
+    # The quantitative axis is now Y, the categorical axis is X.
 
-    # TUNE: x-domain with gentle headroom (avoid 0-width bar when values are tiny)
-    x_max = float(bar_df["value"].max()) if len(bar_df) else 1.0
-    if (not math.isfinite(x_max)) or (x_max <= 0): x_max = 1.0
-    x_max *= 1.1
+    bar_width = 40  # TUNE: Fixed width of the vertical bars (pixels)
+
+    # Y-axis maximum calculation (quantitative axis with headroom)
+    y_max = float(bar_df["value"].max()) if len(bar_df) else 1.0
+    if (not math.isfinite(y_max)) or (y_max <= 0): y_max = 1.0
+    y_max *= 1.1 # TUNE: Add 10% headroom to the quantitative axis scale for visual space
 
     chart = (
         alt.Chart(bar_df)
-        .mark_bar(size=bar_size)  # TUNE: bar thickness only via size
+        .mark_bar(width=bar_width)  # Set the fixed width of the vertical bars
         .encode(
-            y=alt.Y("label:N", title=None, axis=alt.Axis(labels=True, ticks=False)),
-            x=alt.X("value:Q", title=None, axis=alt.Axis(format="~,", labelBound=True),
-                    scale=alt.Scale(domain=[0, x_max], nice=False)),
+            # X-axis for Categories (Labels)
+            x=alt.X(
+                "label:N",
+                title=None,
+                # TUNE: Disable ticks on X-axis and keep labels for category names
+                axis=alt.Axis(labels=True, ticks=False)
+            ),
+            # Y-axis for Quantitative Values
+            y=alt.Y(
+                "value:Q",
+                title=None,
+                # TUNE: Use comma separation for large numbers on Y-axis
+                axis=alt.Axis(format="~,", labelBound=True),
+                # TUNE: Set the domain from 0 to y_max with nice=False for precise control
+                scale=alt.Scale(domain=[0, y_max], nice=False)
+            ),
+            # TUNE: Color for bars, mapped from bar_df["color"]
             color=alt.Color("color:N", scale=None, legend=None),
             tooltip=[
                 alt.Tooltip("label:N", title="구분"),
+                # TUNE: Tooltip format for large numbers (no decimals)
                 alt.Tooltip("value:Q", title="유권자수", format=",.0f"),
             ],
         )
+        # TUNE: Set chart height and padding for the overall container
         .properties(height=box_height_px, padding={"left": 0, "right": 0, "top": 4, "bottom": 2})
-        .configure_view(stroke=None)
+        .configure_view(stroke=None) # Remove border around the chart area
     )
     st.altair_chart(chart, use_container_width=True, theme=None)
 
@@ -242,9 +276,10 @@ def render_population_box(
             "region_total": region_total,
             "avg_total": avg_total,
             "bar_df_head": bar_df.head(3),
-            "x_max": x_max,
-            "bar_size": bar_size,
+            "y_max": y_max,
+            "bar_width": bar_width,
         })
+        
 
 # =========================================================
 # Age Composition (Half donut)
@@ -820,3 +855,4 @@ def render_region_detail_layout(
             render_incumbent_card(df_cur_sel)
         with c3.container(height="stretch"):
             render_prg_party_box(df_idx_sel, df_idx_all=df_idx_all)
+
