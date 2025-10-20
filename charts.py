@@ -341,7 +341,8 @@ def render_age_highlight_chart(pop_sel: pd.DataFrame, *, bookmark_map: dict | No
         .configure_view(stroke=None)
     )
 
-    chart = alt.vconcat(base, num_text, lbl_text).resolve_scale(x="shared")
+    # NOTE: remove resolve_scale(x="shared") because the donut has no x-scale.
+    chart = alt.vconcat(base, num_text, lbl_text, spacing=0)
     st.altair_chart(chart, use_container_width=True, theme=None)
 
 # =========================================================
@@ -795,4 +796,5 @@ def render_region_detail_layout(
             render_incumbent_card(df_cur_sel)
         with c3.container(height="stretch"):
             render_prg_party_box(df_idx_sel, df_idx_all=df_idx_all)
+
 
