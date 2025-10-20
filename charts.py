@@ -103,9 +103,10 @@ COLOR_GRAY = "#D1D5DB"  # Gray color for the average/comparison bar
 
 # =========================================================
 # Population Box – KPI + two-bars (Region vs 10-avg)
-# Key modifications: Vertical bar chart implemented.
-# - Removed fixed bar width for container responsiveness.
-# - Explicitly set X-axis labels to be horizontal.
+# Key modifications:
+# - Implemented explicit grouping by 'region_key' (Gu level) for selected data (df_s) 
+#   before calculating region_total, as requested for Dong-level input.
+# - Ensures chart is responsive and X-axis labels are horizontal.
 # =========================================================
 def render_population_box(
     pop_sel: pd.DataFrame,
@@ -158,6 +159,8 @@ def render_population_box(
         return None
 
     total_col = _find_total_col_in(df_s, bookmark_map)
+    region_key_s = _find_region_key(df_s, bookmark_map) # Find region key for selected data (df_s)
+    
     if not total_col or total_col not in df_s.columns:
         st.info("⚠️ 총유권자 컬럼을 찾지 못했습니다.")
         if SHOW_DEBUG: st.write({"DF_S_cols": list(df_s.columns)})
@@ -172,7 +175,25 @@ def render_population_box(
     df_s[total_col] = pd.to_numeric(df_s[total_col].apply(_to_num), errors="coerce")
     if float_col:
         df_s[float_col] = pd.to_numeric(df_s[float_col].apply(_to_num), errors="coerce")
-    region_total = float(df_s[total_col].sum(skipna=True)) if df_s[total_col].notna().any() else 0.0
+    
+    # TUNE: Calculate region_total by grouping by region key (Gu/District level aggregation)
+    region_total = 0.0
+    if region_key_s and region_key_s in df_s.columns:
+        # NOTE: Aggregation by region code (Gu level) as requested.
+        grp_s = (
+            df_s[[region_key_s, total_col]]
+            .groupby(region_key_s, dropna=False)[total_col]
+            .sum(min_count=1)
+        )
+        if grp_s.notna().any():
+            # Summing the grouped results to get the total population for the selected area.
+            region_total = float(grp_s.sum(skipna=True))
+    else:
+        # Fallback to simple sum if region key is missing (original logic)
+        # TUNE: This sums all rows in the selected data, assuming it's already filtered to the region.
+        if df_s[total_col].notna().any():
+             region_total = float(df_s[total_col].sum(skipna=True))
+             if SHOW_DEBUG: st.warning(f"Region key not found in df_s. Falling back to simple sum.")
 
     # ---------- Compute 10-avg (district-level mean) ----------
     avg_total = None
@@ -242,8 +263,8 @@ def render_population_box(
             x=alt.X(
                 "label:N",
                 title=None,
-                # TUNE: Ensure labels are shown horizontally (labelAngle=0)
-                axis=alt.Axis(labels=True, labelAngle=0)
+                # TUNE: Ensure labels are shown horizontally (labelAngle=0) and spaced slightly from axis line
+                axis=alt.Axis(labels=True, labelAngle=0, labelPadding=10)
             ),
             # Y-axis for Quantitative Values
             y=alt.Y(
@@ -272,11 +293,10 @@ def render_population_box(
         st.write({
             "region_total": region_total,
             "avg_total": avg_total,
-            "bar_df_head": bar_df.head(3),
+            "bar_df_head": bar_df.head(), # TUNE: Changed from head(3) to head() for full debug view
             "y_max": y_max,
-            "responsive_bars": "True", # Changed from bar_width
+            "responsive_bars": "True",
         })
-        
 
 # =========================================================
 # Age Composition (Half donut)
@@ -852,5 +872,6 @@ def render_region_detail_layout(
             render_incumbent_card(df_cur_sel)
         with c3.container(height="stretch"):
             render_prg_party_box(df_idx_sel, df_idx_all=df_idx_all)
+
 
 
