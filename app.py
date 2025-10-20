@@ -42,19 +42,9 @@ DATA_DIR = Path("data")  # [File root] change here if your relative data folder 
 
 # Absolute Scaling: Columns listed here will use the specified value as the 100% max score
 ABSOLUTE_MAX_SCORES = {
-    "합계": 100.0,
-    "유권자환경": 20.0,
-    "정치지형": 20.0,
-    "주체역량": 30.0,
-    "상대역량": 30.0,
-    "고령층 비율": 1.0,
-    "청년층 비율": 1.0,
-    "4-50대 비율": 1.0,
-    "2030여성 비율": 1.0,
-    "진보정당 득표력": 10.0,
-    "현직 득표력": 100.0,
-    "민주당 득표력": 100.0,
-    "보수 득표력": 100.0,
+    "합계": 100.0, "유권자환경": 20.0, "정치지형": 20.0, "주체역량": 30.0, "상대역량": 30.0,
+    "고령층 비율": 1.0, "청년층 비율": 1.0, "4-50대 비율": 1.0, "2030여성 비율": 1.0,
+    "진보정당 득표력": 10.0, "현직 득표력": 100.0, "민주당 득표력": 100.0, "보수 득표력": 100.0,
 }
 
 # ===== Style Configurations (English Comments for Maintainability) =====
@@ -67,11 +57,7 @@ DYNAMIC_HIGHLIGHT_CELL_BG = "#E0F2FE"  # [Color] Light sky-blue for Top 3 cells.
 
 # [Color] Score bar colors in the Summary table
 BAR_COLORS_MAIN = {
-    "합계": "#3498DB",
-    "유권자환경": "#48C9B0",
-    "정치지형": "#1ABC9C",
-    "주체역량": "#76D7C4",
-    "상대역량": "#2ECC71",
+    "합계": "#3498DB", "유권자환경": "#48C9B0", "정치지형": "#1ABC9C", "주체역량": "#76D7C4", "상대역량": "#2ECC71",
 }
 
 # ====================================================================
@@ -81,8 +67,7 @@ BAR_COLORS_MAIN = {
 def _read_scoring_cached(path_str: str) -> pd.DataFrame:
     """Read scoring CSV/TSV with caching."""
     p = Path(path_str)
-    if not p.exists():
-        return pd.DataFrame()
+    if not p.exists(): return pd.DataFrame()
     try:
         df = pd.read_csv(p, encoding="utf-8-sig")
         if df.shape[1] == 1:
@@ -95,8 +80,7 @@ def _read_scoring_cached(path_str: str) -> pd.DataFrame:
 def _read_markdown_cached(path_str: str) -> str | None:
     """Read Markdown with caching."""
     p = Path(path_str)
-    if not p.exists():
-        return None
+    if not p.exists(): return None
     for enc in ("utf-8-sig", "utf-8", "cp949", "euc-kr"):
         try:
             return p.read_text(encoding=enc)
@@ -110,8 +94,7 @@ SIDO_CANDIDATES = ["시/도", "시도", "광역", "sido", "province"]
 
 def _normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
     """Strip whitespaces/newlines from headers."""
-    if df is None or df.empty:
-        return pd.DataFrame()
+    if df is None or df.empty: return pd.DataFrame()
     out = df.copy()
     out.columns = [str(c).strip().replace("\n", "").replace("\r", "") for c in out.columns]
     return out
@@ -133,13 +116,11 @@ def _canon_code(x: object) -> str:
 
 def ensure_code_col(df: pd.DataFrame) -> pd.DataFrame:
     """Ensure '코드' column exists by renaming detected code column."""
-    if df is None or df.empty:
-        return pd.DataFrame()
+    if df is None or df.empty: return pd.DataFrame()
     df2 = _normalize_columns(df)
     if "코드" not in df2.columns:
         found = _detect_col(df2, CODE_CANDIDATES)
-        if found:
-            df2 = df2.rename(columns={found: "코드"})
+        if found: df2 = df2.rename(columns={found: "코드"})
     if "코드" not in df2.columns:
         idx_name = df2.index.name
         if idx_name and idx_name in CODE_CANDIDATES + ["코드"]:
@@ -150,12 +131,10 @@ def ensure_code_col(df: pd.DataFrame) -> pd.DataFrame:
 
 def get_by_code(df: pd.DataFrame, code: str) -> pd.DataFrame:
     """Filter DF by standardized '코드'."""
-    if df is None or df.empty:
-        return pd.DataFrame()
+    if df is None or df.empty: return pd.DataFrame()
     df2 = _normalize_columns(df)
     code_col = "코드" if "코드" in df2.columns else _detect_col(df2, CODE_CANDIDATES)
-    if not code_col:
-        return pd.DataFrame()
+    if not code_col: return pd.DataFrame()
     key = _canon_code(code)
     try:
         sub = df2[df2[code_col].astype(str).map(_canon_code) == key]
@@ -205,13 +184,11 @@ def _format_value(val: float | object, col_name: str) -> str:
     """Comma for counts; 2 decimals for ratios/scores."""
     try:
         v = float(val)
-        if np.isnan(v):
-            return ""
+        if np.isnan(v): return ""
     except Exception:
         return str(val)
     count_names = ["유권자 수", "유동인구", "진보당 당원수", "진보당 지방선거 후보 수", "유동성A", "유동성B"]
-    if col_name in count_names:
-        return f"{int(round(v)):,d}"
+    if col_name in count_names: return f"{int(round(v)):,d}"
     return f"{v:.2f}"
 
 def _bar_cell_factory(score_df: pd.DataFrame, score_cols: list[str], bar_colors: dict) -> callable:
@@ -229,8 +206,7 @@ def _bar_cell_factory(score_df: pd.DataFrame, score_cols: list[str], bar_colors:
             v = float(val)
         except Exception:
             return f"<span style='font-size:12px;font-weight:600;'>{val}</span>"
-        if np.isnan(v):
-            return ""
+        if np.isnan(v): return ""
         max_score = ABSOLUTE_MAX_SCORES.get(col, dynamic_maxes.get(col, 1.0))
         max_score = max(1.0, max_score)
         pct = max(0.0, min(100.0, (v / max_score) * 100.0))
@@ -254,9 +230,7 @@ def _text_only_cell(val: float | object, col_name: str) -> str:
     """Plain numeric cell for detailed table (no bars)."""
     formatted_value = _format_value(val, col_name)
     return (
-        f'<div style="text-align:center; padding: 6px 8px; font-size:13px; font-weight:600; color:#1F2937;">'
-        f'{formatted_value}'
-        f'</div>'
+        f'<div style="text-align:center; padding: 6px 8px; font-size:13px; font-weight:600; color:#1F2937;">{formatted_value}</div>'
     )
 
 # ---------- [UPDATED] Minimal indicator description loader ----------
@@ -269,18 +243,14 @@ def _read_index_desc_csv() -> pd.DataFrame:
     - Encodings: utf-8-sig -> utf-8 -> cp949
     - If only 1 column is detected, try TSV fallback once.
     """
-    # [Paths] Keep it minimal: just two explicit candidates (no other assumptions)
-    candidates = [DATA_DIR / "index.csv", Path("/mnt/data/index.csv")]
+    candidates = [DATA_DIR / "index.csv", Path("/mnt/data/index.csv")]  # [Paths] minimal explicit candidates
     encodings = ("utf-8-sig", "utf-8", "cp949")  # [Encoding] extend if you later standardize differently
-
     for p in candidates:
-        if not p.exists():
-            continue
+        if not p.exists(): continue
         for enc in encodings:
             try:
                 df = pd.read_csv(p, encoding=enc)
                 if df.shape[1] == 1:
-                    # Possible TSV saved as .csv
                     try:
                         df = pd.read_csv(p, encoding=enc, sep="\t")
                     except Exception:
@@ -292,12 +262,10 @@ def _read_index_desc_csv() -> pd.DataFrame:
 
 def _find_first_col(df: pd.DataFrame, candidates: list[str]) -> str | None:
     """Pick the first matching column header by exact string match."""
-    if df is None or df.empty:
-        return None
+    if df is None or df.empty: return None
     cols = [str(c).strip() for c in df.columns]
     for key in candidates:
-        if key in cols:
-            return df.columns[cols.index(key)]
+        if key in cols: return df.columns[cols.index(key)]
     return None
 
 # --------------------------------
@@ -330,15 +298,13 @@ with st.spinner("데이터 불러오는 중..."):
 # --------------------------------
 if menu == "종합":
     st.title("🗳️ 지역구 선정 1단계 조사 결과")
-    st.write("")
-    st.divider()
+    st.write(""); st.divider()
 
     # --- Load Scoring Data ---
     csv_path = Path("data/scoring.csv")
     if not csv_path.exists():
         st.error("`data/scoring.csv`를 찾을 수 없습니다. (경로 고정)")
         st.stop()
-
     try:
         df = pd.read_csv(csv_path, encoding="utf-8-sig")
         if df.shape[1] == 1:
@@ -351,7 +317,6 @@ if menu == "종합":
     df = _normalize_columns(df)
     df.rename(columns={df.columns[0]: "지역"}, inplace=True)
     label_col = "지역"
-
     score_cols = [c for c in df.columns if c != label_col]
     df[score_cols] = df[score_cols].apply(pd.to_numeric, errors="coerce")
 
@@ -361,9 +326,7 @@ if menu == "종합":
 
     # --- Build HTML table for main scoring ('결과 요약') ---
     headers = [label_col] + score_cols
-    thead = (
-        f"<th style='text-align:left;padding:6px 8px;white-space:nowrap;width:{REGION_COL_WIDTH};'>지역</th>"
-    )
+    thead = f"<th style='text-align:left;padding:6px 8px;white-space:nowrap;width:{REGION_COL_WIDTH};'>지역</th>"
     remaining_cols_count = len(score_cols)
     col_width_pct = f"{100 / remaining_cols_count}%" if remaining_cols_count > 0 else "auto"
     thead += "".join(
@@ -436,9 +399,7 @@ if menu == "종합":
                     df_final = df_final.dropna(subset=[label_col_new]).dropna(subset=present_cols, how='all').reset_index(drop=True)
 
                     # --- Detailed table (text only)
-                    thead_new = (
-                        f"<th style='text-align:left;padding:6px 8px;white-space:nowrap;font-weight:700;width:{REGION_COL_WIDTH};'>지역</th>"
-                    )
+                    thead_new = f"<th style='text-align:left;padding:6px 8px;white-space:nowrap;font-weight:700;width:{REGION_COL_WIDTH};'>지역</th>"
                     remaining_cols_count_new = len(present_cols)
                     col_width_pct_new = f"{100 / remaining_cols_count_new}%" if remaining_cols_count_new > 0 else "auto"
                     thead_new += "".join(
@@ -467,69 +428,67 @@ if menu == "종합":
                     st.markdown(table_html_new, unsafe_allow_html=True)
 
                     # ============================
-                    # Descriptions under the table
+                    # Descriptions under the table → BULLETS (not a table)
                     # ============================
                     st.divider()  # [Spacing] separator between data table & descriptions
-
-                    # Load index descriptions (data/index.csv or /mnt/data/index.csv)
-                    desc_df = _read_index_desc_csv()
-                    name_col = _find_first_col(desc_df, ["지표", "지표명", "항목", "지표명칭", "indicator", "name"]) if not desc_df.empty else None
-                    desc_col = _find_first_col(desc_df, ["설명", "정의", "지표설명", "description", "desc"]) if not desc_df.empty else None
-                    src_col  = _find_first_col(desc_df, ["출처", "source"]) if not desc_df.empty else None
-
                     st.subheader(f"지표 설명 · {selected_group}")
 
-                    if desc_df.empty or not name_col:
+                    desc_df = _read_index_desc_csv()
+                    if desc_df.empty:
                         st.info("`index.csv`에서 지표 설명을 불러오지 못했습니다. (경로/인코딩/구분자 확인)")
                     else:
-                        present_set = set(present_cols)
-                        df_desc = desc_df.copy()
-                        df_desc[name_col] = df_desc[name_col].astype(str).str.strip()
-                        matched = df_desc[df_desc[name_col].isin(present_set)].copy()
+                        # Column detection for: name, description, correlation, weight
+                        name_col = _find_first_col(desc_df, ["지표", "지표명", "항목", "indicator", "name"])
+                        desc_col = _find_first_col(desc_df, ["설명", "정의", "지표설명", "description", "desc"])
+                        corr_col = _find_first_col(desc_df, ["상관관계", "corr", "correlation"])
+                        wgt_col  = _find_first_col(desc_df, ["가중치", "weight"])
 
-                        if matched.empty:
-                            st.info("현재 탭의 컬럼명과 `index.csv`의 지표명이 일치하지 않습니다. 표기 통일이 필요합니다.")
-                            st.caption(f"탭 컬럼: {', '.join(present_cols)}")
+                        if not name_col:
+                            st.info("`index.csv`에 지표명(예: '지표' 또는 '지표명') 컬럼이 없습니다.")
                         else:
-                            show_cols = [name_col] + ([desc_col] if desc_col else []) + ([src_col] if src_col else [])
-                            try:
-                                matched = matched.loc[:, show_cols].sort_values(by=[name_col]).reset_index(drop=True)
-                            except Exception:
-                                matched = matched.loc[:, show_cols].reset_index(drop=True)
+                            df_desc = desc_df.copy()
+                            df_desc[name_col] = df_desc[name_col].astype(str).str.strip()
 
-                            head_src = '<th style="text-align:left;padding:8px 10px;">출처</th>' if src_col else ''
-                            rows_html = []
-                            for _, r in matched.iterrows():
-                                nm = str(r.get(name_col, "")).strip()
-                                ds = str(r.get(desc_col, "" if desc_col else "")).strip()
-                                sc = str(r.get(src_col, "" if src_col else "")).strip()
-                                rows_html.append(
-                                    f"""
-                                    <tr>
-                                        <td style="padding:8px 10px;vertical-align:top;font-weight:700;white-space:nowrap;">{nm}</td>
-                                        <td style="padding:8px 10px;vertical-align:top;">{ds}</td>
-                                        { f'<td style="padding:8px 10px;vertical-align:top;color:#4B5563;">{sc}</td>' if src_col else '' }
-                                    </tr>
-                                    """
-                                )
+                            # Match desc rows to the indicators shown in this tab
+                            present_set = set(present_cols)
+                            matched = df_desc[df_desc[name_col].isin(present_set)].copy()
+                            if matched.empty:
+                                st.info("현재 탭의 컬럼명과 `index.csv`의 지표명이 일치하지 않습니다. 표기 통일이 필요합니다.")
+                                st.caption(f"탭 컬럼: {', '.join(present_cols)}")
+                            else:
+                                # Build bullet list HTML (lightweight)
+                                # [Typography] indicator name font-size slightly smaller (12.5px)
+                                items = []
+                                for _, r in matched.sort_values(by=[name_col]).iterrows():
+                                    nm  = str(r.get(name_col, "")).strip()
+                                    ds  = str(r.get(desc_col, "" if desc_col else "")).strip()
+                                    cr  = str(r.get(corr_col, "" if corr_col else "")).strip()
+                                    wg  = str(r.get(wgt_col, "" if wgt_col else "")).strip()
 
-                            html_desc = f"""
-                            <div style="overflow-x:auto;">
-                                <table style="border-collapse:separate;border-spacing:0;width:100%;font-size:13px;">
-                                    <thead>
-                                        <tr>
-                                            <th style="text-align:left;padding:8px 10px;white-space:nowrap;">지표</th>
-                                            <th style="text-align:left;padding:8px 10px;">설명</th>
-                                            {head_src}
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {''.join(rows_html)}
-                                    </tbody>
-                                </table>
-                            </div>
-                            """
-                            components.html(html_desc, height=min(600, 140 + 32 * len(matched)), scrolling=True)
+                                    meta_parts = []
+                                    if cr: meta_parts.append(f"상관관계: {cr}")
+                                    if wg: meta_parts.append(f"가중치: {wg}")
+                                    meta = " · ".join(meta_parts)
+
+                                    items.append(f"""
+                                        <li style="margin:0 0 10px 0;">
+                                          <div>
+                                            <div style="font-weight:700; font-size:12.5px; line-height:1.2; color:#111827;">{nm}</div>
+                                            {'<div style="margin-top:4px; font-size:13px; color:#1F2937;">' + ds + '</div>' if ds else ''}
+                                            {'<div style="margin-top:4px; font-size:12px; color:#4B5563;">' + meta + '</div>' if meta else ''}
+                                          </div>
+                                        </li>
+                                    """)
+
+                                html_bullets = f"""
+                                <div style="padding:2px 2px 8px 2px;">
+                                  <ul style="margin:0; padding-left:18px; list-style-type:disc;">
+                                    {''.join(items)}
+                                  </ul>
+                                </div>
+                                """
+                                # [Height] simple heuristic per item; adjust later if needed
+                                components.html(html_bullets, height=min(680, 140 + 40 * len(items)), scrolling=True)
 
             else:
                 if df_idx.empty:
