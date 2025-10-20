@@ -238,7 +238,7 @@ def render_population_box(
             """, unsafe_allow_html=True
         )
 
-    st.markdown("<div style='height:16px;'></div>", unsafe_allow_html=True)
+    st.markdown("<div style='height:20px;'></div>", unsafe_allow_html=True)
 
     # ---------- Vertical Bar Chart (Two-Bar Comparison) ----------
     if grp is not None and avg_total is not None and region_total > 0:
@@ -300,15 +300,17 @@ def render_age_highlight_chart(pop_sel: pd.DataFrame, *, bookmark_map: dict | No
         st.info("연령 구성 데이터가 없습니다.")
         return
 
+    # --- Core labels ---
     Y, M, O = "청년층(18~39세)", "중년층(40~59세)", "고령층(65세 이상)"
 
-    total_col = None
+    # --- Total detection (optional) ---
     try:
         total_col = _col(df, bookmark_map, "total_voters",
                          ["전체 유권자", "유권자수", "선거인수", "total_voters"], required=False)
     except Exception:
         total_col = None
 
+    # --- Validate columns ---
     for c in (Y, M, O):
         if c not in df.columns:
             st.info(f"연령대 컬럼이 없습니다: {c}")
@@ -348,11 +350,12 @@ def render_age_highlight_chart(pop_sel: pd.DataFrame, *, bookmark_map: dict | No
     })
 
     # --- Base donut chart ---
-    base = (
+    donut = (
         alt.Chart(df_vis)
         .mark_arc(innerRadius=70, outerRadius=110, cornerRadius=6, stroke="white", strokeWidth=1)
         .encode(
-            theta=alt.Theta("비율:Q", stack=True, sort=None, scale=alt.Scale(range=[-math.pi/2, math.pi/2])),
+            theta=alt.Theta("비율:Q", stack=True, sort=None,
+                            scale=alt.Scale(range=[-math.pi/2, math.pi/2])),
             order=alt.Order("순서:Q"),
             color=alt.Color("강조:N",
                             scale=alt.Scale(domain=[True, False], range=["#1E6BFF", "#E5E7EB"]),
@@ -365,27 +368,29 @@ def render_age_highlight_chart(pop_sel: pd.DataFrame, *, bookmark_map: dict | No
         .properties(height=box_height_px)
     )
 
-    # --- Center text layers (numeric-safe positioning) ---
+    # --- Center texts (true center via transform_calculate) ---
     label_map = {Y: "청년층(18~39세)", M: "중년층(40~59세)", O: "고령층(65세 이상)"}
     pct_txt = f"{ratios100[labels.index(focus)]:.2f}%"
     lbl_txt = label_map.get(focus, focus)
 
+    text_df = pd.DataFrame({"pct": [pct_txt], "lbl": [lbl_txt]})
+
+    # Create both texts with calculated center
     num_layer = (
-        alt.Chart(pd.DataFrame({"t": [pct_txt]}))
+        alt.Chart(text_df)
+        .transform_calculate(cx="width/2")  # <- key line: center X dynamically
         .mark_text(fontSize=28, fontWeight="bold", color="#0f172a")
-        .encode(text="t:N", x=alt.value(0), y=alt.value(box_height_px / 2))
-        .properties(width="container")  # ensures horizontal centering
+        .encode(x="cx:Q", y=alt.value(box_height_px / 2), text="pct:N")
     )
     lbl_layer = (
-        alt.Chart(pd.DataFrame({"t": [lbl_txt]}))
+        alt.Chart(text_df)
+        .transform_calculate(cx="width/2")
         .mark_text(fontSize=14, color="#475569", baseline="top")
-        .encode(text="t:N", x=alt.value(0), y=alt.value(box_height_px / 2 + 26))
-        .properties(width="container")
+        .encode(x="cx:Q", y=alt.value(box_height_px / 2 + 26), text="lbl:N")
     )
 
-    # Combine layers safely
     final_chart = (
-        alt.layer(base, num_layer, lbl_layer)
+        alt.layer(donut, num_layer, lbl_layer)
         .configure_view(stroke=None)
         .properties(autosize=alt.AutoSizeParams(type="fit", contains="padding"))
     )
@@ -873,6 +878,7 @@ def render_region_detail_layout(
             render_incumbent_card(df_cur_sel)
         with c3.container(height="stretch"):
             render_prg_party_box(df_idx_sel, df_idx_all=df_idx_all)
+
 
 
 
