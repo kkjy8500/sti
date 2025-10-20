@@ -300,23 +300,20 @@ def render_age_highlight_chart(pop_sel: pd.DataFrame, *, bookmark_map: dict | No
         st.info("연령 구성 데이터가 없습니다.")
         return
 
-    # --- Core labels ---
     Y, M, O = "청년층(18~39세)", "중년층(40~59세)", "고령층(65세 이상)"
 
-    # --- Total detection (optional) ---
+    total_col = None
     try:
         total_col = _col(df, bookmark_map, "total_voters",
                          ["전체 유권자", "유권자수", "선거인수", "total_voters"], required=False)
     except Exception:
         total_col = None
 
-    # --- Validate columns ---
     for c in (Y, M, O):
         if c not in df.columns:
             st.info(f"연령대 컬럼이 없습니다: {c}")
             return
 
-    # --- Numeric casting ---
     def _num(v):
         try:
             return float(str(v).replace(",", "").replace("%", "").strip())
@@ -349,13 +346,12 @@ def render_age_highlight_chart(pop_sel: pd.DataFrame, *, bookmark_map: dict | No
         "순서": [1, 2, 3, 4],
     })
 
-    # --- Base donut chart ---
+    # --- Donut chart ---
     donut = (
         alt.Chart(df_vis)
         .mark_arc(innerRadius=70, outerRadius=110, cornerRadius=6, stroke="white", strokeWidth=1)
         .encode(
-            theta=alt.Theta("비율:Q", stack=True, sort=None,
-                            scale=alt.Scale(range=[-math.pi/2, math.pi/2])),
+            theta=alt.Theta("비율:Q", stack=True, sort=None, scale=alt.Scale(range=[-math.pi/2, math.pi/2])),
             order=alt.Order("순서:Q"),
             color=alt.Color("강조:N",
                             scale=alt.Scale(domain=[True, False], range=["#1E6BFF", "#E5E7EB"]),
@@ -366,33 +362,30 @@ def render_age_highlight_chart(pop_sel: pd.DataFrame, *, bookmark_map: dict | No
             ],
         )
         .properties(height=box_height_px)
+        .configure_view(stroke=None)
     )
 
-    # --- Center texts (true center via transform_calculate) ---
+    # --- Center text (manual center alignment; no schema errors) ---
     label_map = {Y: "청년층(18~39세)", M: "중년층(40~59세)", O: "고령층(65세 이상)"}
     pct_txt = f"{ratios100[labels.index(focus)]:.2f}%"
     lbl_txt = label_map.get(focus, focus)
 
-    text_df = pd.DataFrame({"pct": [pct_txt], "lbl": [lbl_txt]})
+    # NOTE: 160은 시각적 중심 기준으로 잡은 값
+    center_x = 160  
 
-    # Create both texts with calculated center
     num_layer = (
-        alt.Chart(text_df)
-        .transform_calculate(cx="width/2")  # <- key line: center X dynamically
-        .mark_text(fontSize=28, fontWeight="bold", color="#0f172a")
-        .encode(x="cx:Q", y=alt.value(box_height_px / 2), text="pct:N")
+        alt.Chart(pd.DataFrame({"t": [pct_txt]}))
+        .mark_text(fontSize=28, fontWeight="bold", color="#0f172a", align="center")
+        .encode(x=alt.value(center_x), y=alt.value(box_height_px / 2), text="t:N")
     )
     lbl_layer = (
-        alt.Chart(text_df)
-        .transform_calculate(cx="width/2")
-        .mark_text(fontSize=14, color="#475569", baseline="top")
-        .encode(x="cx:Q", y=alt.value(box_height_px / 2 + 26), text="lbl:N")
+        alt.Chart(pd.DataFrame({"t": [lbl_txt]}))
+        .mark_text(fontSize=14, color="#475569", baseline="top", align="center")
+        .encode(x=alt.value(center_x), y=alt.value(box_height_px / 2 + 26), text="t:N")
     )
 
-    final_chart = (
-        alt.layer(donut, num_layer, lbl_layer)
-        .configure_view(stroke=None)
-        .properties(autosize=alt.AutoSizeParams(type="fit", contains="padding"))
+    final_chart = alt.layer(donut, num_layer, lbl_layer).properties(
+        autosize=alt.AutoSizeParams(type="fit", contains="padding")
     )
 
     st.altair_chart(final_chart, use_container_width=True, theme=None)
@@ -878,6 +871,7 @@ def render_region_detail_layout(
             render_incumbent_card(df_cur_sel)
         with c3.container(height="stretch"):
             render_prg_party_box(df_idx_sel, df_idx_all=df_idx_all)
+
 
 
 
