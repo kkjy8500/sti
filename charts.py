@@ -301,7 +301,7 @@ def render_age_highlight_chart(pop_sel: pd.DataFrame, *, bookmark_map: dict | No
         return
 
     Y, M, O = "청년층(18~39세)", "중년층(40~59세)", "고령층(65세 이상)"
-
+    total_col = None
     try:
         total_col = _col(df, bookmark_map, "total_voters",
                          ["전체 유권자", "유권자수", "선거인수", "total_voters"], required=False)
@@ -345,19 +345,16 @@ def render_age_highlight_chart(pop_sel: pd.DataFrame, *, bookmark_map: dict | No
         "순서": [1, 2, 3, 4],
     })
 
-    # -----------------------------------
-    # Base donut chart
-    # -----------------------------------
+    # --- 도넛 (상단 반원 그대로)
     donut = (
         alt.Chart(df_vis)
         .mark_arc(innerRadius=70, outerRadius=110, cornerRadius=6, stroke="white", strokeWidth=1)
         .encode(
             theta=alt.Theta("비율:Q", stack=True, sort=None,
-                            scale=alt.Scale(range=[0, math.pi])),
+                            scale=alt.Scale(range=[-math.pi/2, math.pi/2])),  # ✅ 상단 반원 유지
             order=alt.Order("순서:Q"),
             color=alt.Color("강조:N",
-                            scale=alt.Scale(domain=[True, False],
-                                            range=["#1E6BFF", "#E5E7EB"]),
+                            scale=alt.Scale(domain=[True, False], range=["#1E6BFF", "#E5E7EB"]),
                             legend=None),
             tooltip=[
                 alt.Tooltip("연령:N", title="연령대"),
@@ -367,19 +364,15 @@ def render_age_highlight_chart(pop_sel: pd.DataFrame, *, bookmark_map: dict | No
         .properties(height=box_height_px)
     )
 
-    # -----------------------------------
-    # Center text (dynamic width & height)
-    # -----------------------------------
+    # --- 텍스트 중심 위치를 width/2, height*0.65 기준으로
     label_map = {Y: "청년층(18~39세)", M: "중년층(40~59세)", O: "고령층(65세 이상)"}
     pct_txt = f"{ratios100[labels.index(focus)]:.2f}%"
     lbl_txt = label_map.get(focus, focus)
-
     text_df = pd.DataFrame({"pct": [pct_txt], "lbl": [lbl_txt]})
 
-    # 텍스트 위치를 width/2, height/2 기준으로 동적으로 계산
     num_layer = (
         alt.Chart(text_df)
-        .transform_calculate(cx="width/2", cy="height/2")
+        .transform_calculate(cx="width/2", cy="height*0.65")  # ✅ 중앙보다 약간 아래
         .mark_text(fontSize=28, fontWeight="bold", color="#0f172a",
                    align="center", baseline="middle")
         .encode(x="cx:Q", y="cy:Q", text="pct:N")
@@ -387,14 +380,11 @@ def render_age_highlight_chart(pop_sel: pd.DataFrame, *, bookmark_map: dict | No
 
     lbl_layer = (
         alt.Chart(text_df)
-        .transform_calculate(cx="width/2", cy="height/2 + 26")
+        .transform_calculate(cx="width/2", cy="height*0.65 + 26")
         .mark_text(fontSize=14, color="#475569", align="center", baseline="top")
         .encode(x="cx:Q", y="cy:Q", text="lbl:N")
     )
 
-    # -----------------------------------
-    # Combine and render
-    # -----------------------------------
     final_chart = (
         alt.layer(donut, num_layer, lbl_layer)
         .configure_view(stroke=None)
@@ -884,6 +874,7 @@ def render_region_detail_layout(
             render_incumbent_card(df_cur_sel)
         with c3.container(height="stretch"):
             render_prg_party_box(df_idx_sel, df_idx_all=df_idx_all)
+
 
 
 
