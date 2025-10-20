@@ -254,48 +254,40 @@ def render_population_box(
             "Highlight": ["Selected", "Average"],
         }).replace([pd.NA, float("inf"), float("-inf")], 0.0)
 
-        COLOR_BLUE = "#3B82F6"
-        COLOR_GRAY = "#6B7280"
-
-        base = (
-            alt.Chart(df_chart)
-            .encode(
-                x=alt.X("Category:N", title=None, axis=alt.Axis(labelAngle=0)),
-                y=alt.Y(
-                    "VoterCount:Q",
-                    title="유권자 수 (명)",
-                    scale=alt.Scale(domain=[0, 250000]),
-                    axis=alt.Axis(format="~s")
-                ),
-                tooltip=[
-                    alt.Tooltip("Category:N", title="구분"),
-                    alt.Tooltip("VoterCount:Q", title="유권자 수", format=",.0f"),
-                ],
-            )
-            .properties(
-                height=int(box_height_px * 1.5),
-                padding={"top": 8, "right": 0, "bottom": 0, "left": 0},  # 상단 여백
-            )
+        x_enc = alt.X("Category:N", title=None, axis=alt.Axis(labelAngle=0))
+        y_enc = alt.Y(
+            "VoterCount:Q",
+            title="유권자 수 (명)",
+            scale=alt.Scale(domain=[0, 250000]),
+            axis=alt.Axis(format="~s"),
         )
-
-        bar_color = alt.Color(
+        color_enc = alt.Color(
             "Highlight:N",
             scale=alt.Scale(domain=["Selected", "Average"], range=[COLOR_BLUE, COLOR_GRAY]),
             legend=None,
         )
 
-        bars = base.mark_bar(cornerRadiusEnd=3, width=50).encode(color=bar_color)
+        base = alt.Chart(df_chart)
+
+        bars = base.mark_bar(cornerRadiusEnd=3, width=50).encode(
+            x=x_enc, y=y_enc, color=color_enc,
+            tooltip=[
+                alt.Tooltip("Category:N", title="구분"),
+                alt.Tooltip("VoterCount:Q", title="유권자 수", format=",.0f"),
+            ],
+        )
 
         text = base.mark_text(
-            align="center",
-            baseline="bottom",
-            dy=-8,
-            fontWeight="bold",
-            fontSize=14,
-            color="#1F2937",
-        ).encode(text=alt.Text("VoterCount:Q", format=",.0f"))
+            align="center", baseline="bottom", dy=-8, fontWeight="bold", fontSize=14, color="#1F2937"
+        ).encode(
+            x=x_enc, y=y_enc, text=alt.Text("VoterCount:Q", format=",.0f")
+        )
 
-        chart = bars + text
+        chart = alt.layer(bars, text, data=df_chart).properties(
+            height=int(box_height_px * 1.5),
+            padding={"top": 8, "right": 0, "bottom": 0, "left": 0},
+        ).configure_view(stroke=None)
+
         st.altair_chart(chart, use_container_width=True)
 
 # =========================================================
@@ -872,6 +864,7 @@ def render_region_detail_layout(
             render_incumbent_card(df_cur_sel)
         with c3.container(height="stretch"):
             render_prg_party_box(df_idx_sel, df_idx_all=df_idx_all)
+
 
 
 
