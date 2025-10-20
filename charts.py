@@ -353,7 +353,7 @@ def render_age_highlight_chart(pop_sel: pd.DataFrame, *, bookmark_map: dict | No
         "순서": [1, 2, 3, 4],
     })
 
-    # --- Base donut chart (responsive) ---
+    # --- Base donut chart ---
     chart = (
         alt.Chart(df_vis)
         .mark_arc(innerRadius=70, outerRadius=110, cornerRadius=6, stroke="white", strokeWidth=1)
@@ -372,28 +372,37 @@ def render_age_highlight_chart(pop_sel: pd.DataFrame, *, bookmark_map: dict | No
         .properties(height=box_height_px)
     )
 
-    # --- Center texts (responsive horizontal position) ---
+    # --- Center text layer (schema-safe & responsive) ---
     label_map = {Y: "청년층(18~39세)", M: "중년층(40~59세)", O: "고령층(65세 이상)"}
     pct_txt = f"{ratios100[labels_order.index(focus)]:.2f}%"
 
-    num_text = (
-        alt.Chart(pd.DataFrame({"t": [pct_txt]}))
-        .mark_text(fontSize=28, fontWeight="bold", color="#0f172a")
-        .encode(text="t:N", x=alt.expr("width/2"), y=alt.value(box_height_px / 2))
-    )
-    lbl_text = (
-        alt.Chart(pd.DataFrame({"t": [label_map.get(focus, focus)]}))
-        .mark_text(fontSize=14, color="#475569", baseline="top")
-        .encode(text="t:N", x=alt.expr("width/2"), y=alt.value(box_height_px / 2 + 26))
+    text_df = pd.DataFrame({
+        "text": [pct_txt, label_map.get(focus, focus)],
+        "type": ["pct", "label"],
+    })
+
+    text_layer = (
+        alt.Chart(text_df)
+        .mark_text(align="center")
+        .encode(
+            x=alt.value("50%"),  # ✅ center horizontally, schema-safe
+            y=alt.Y("type:N",
+                    sort=["pct", "label"],
+                    axis=None,
+                    scale=alt.Scale(domain=["pct", "label"], range=[box_height_px/2, box_height_px/2 + 26])),
+            text="text:N",
+            fontSize=alt.condition(alt.datum.type == "pct", alt.value(28), alt.value(14)),
+            fontWeight=alt.condition(alt.datum.type == "pct", alt.value("bold"), alt.value("normal")),
+            color=alt.condition(alt.datum.type == "pct", alt.value("#0f172a"), alt.value("#475569")),
+        )
     )
 
     final_chart = (
-        (chart + num_text + lbl_text)
-        .properties(autosize=alt.AutoSizeParams(type="fit", contains="padding"))
+        alt.layer(chart, text_layer)
         .configure_view(stroke=None)
+        .properties(autosize=alt.AutoSizeParams(type="fit", contains="padding"))
     )
 
-    # --- Render ---
     st.altair_chart(final_chart, use_container_width=True, theme=None)
 
 # =========================================================
@@ -877,6 +886,7 @@ def render_region_detail_layout(
             render_incumbent_card(df_cur_sel)
         with c3.container(height="stretch"):
             render_prg_party_box(df_idx_sel, df_idx_all=df_idx_all)
+
 
 
 
