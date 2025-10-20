@@ -13,14 +13,14 @@ import numpy as np
 
 # Data Loader Imports (Korean function names are maintained as per the original structure)
 from data_loader import (
-    load_bookmark,              # bookmark.csv (optional but preferred)
-    load_bookmark_map,          # -> dict, standard_key -> actual column
-    load_population_agg,        # population.csv
-    load_party_labels,          # party_labels.csv
-    load_vote_trend,            # vote_trend.csv
-    load_results_2024,          # 5_na_dis_results.csv
-    load_current_info,          # current_info.csv
-    load_index_sample,          # index_sample.csv
+    load_bookmark,             # bookmark.csv (optional but preferred)
+    load_bookmark_map,         # -> dict, standard_key -> actual column
+    load_population_agg,       # population.csv
+    load_party_labels,         # party_labels.csv
+    load_vote_trend,           # vote_trend.csv
+    load_results_2024,         # 5_na_dis_results.csv
+    load_current_info,         # current_info.csv
+    load_index_sample,         # index_sample.csv
 )
 
 # Chart Renderer Imports (Korean function names are maintained as per the original structure)
@@ -71,11 +71,11 @@ DYNAMIC_HIGHLIGHT_CELL_BG = "#E0F2FE" # Light sky blue for dynamic Top 3 scores
 
 # Colors for the main scoring bars (Used in the '종합' tab - '결과 요약')
 BAR_COLORS_MAIN = {
-    "합계": "#3498DB",          # Total Score Bar Color (Blue)
+    "합계": "#3498DB",           # Total Score Bar Color (Blue)
     "유권자환경": "#48C9B0", # Electorate Environment Bar Color (Light Cyan)
-    "정치지형": "#1ABC9C",    # Political Landscape Bar Color (Green)
-    "주체역량": "#76D7C4",    # Subjective Capacity Bar Color (Very Light Green)
-    "상대역량": "#2ECC71",    # Opponent Capacity Bar Color (Emerald Green)
+    "정치지형": "#1ABC9C",     # Political Landscape Bar Color (Green)
+    "주체역량": "#76D7C4",     # Subjective Capacity Bar Color (Very Light Green)
+    "상대역량": "#2ECC71",     # Opponent Capacity Bar Color (Emerald Green)
 }
 # ====================================================================
 
@@ -110,6 +110,38 @@ def _read_markdown_cached(path_str: str) -> str | None:
         except Exception:
             return None
 
+# ====================================================================
+# NEW FUNCTION: Load Index Description from data/index.csv
+# ====================================================================
+@st.cache_data(show_spinner=False)
+def load_index_descriptions(data_dir: Path) -> pd.DataFrame:
+    """
+    Loads data/index.csv (expected header: 지표명, 설명, 상관관계, 가중치) 
+    and returns a normalized DataFrame.
+    """
+    path = data_dir / "index.csv"
+    if not path.exists():
+        return pd.DataFrame(columns=["지표명", "설명"])
+    
+    try:
+        df = pd.read_csv(path, encoding="utf-8-sig")
+        df = _normalize_columns(df)
+        
+        # Ensure the required columns exist
+        if "지표명" in df.columns and "설명" in df.columns:
+            return df.loc[:, ["지표명", "설명"]].dropna(subset=["지표명", "설명"]).copy()
+        else:
+            # Handle case where column names are different but predictable
+            if df.columns.shape[0] >= 2:
+                df.rename(columns={df.columns[0]: "지표명", df.columns[1]: "설명"}, inplace=True)
+                return df.loc[:, ["지표명", "설명"]].dropna(subset=["지표명", "설명"]).copy()
+                
+            return pd.DataFrame(columns=["지표명", "설명"])
+    except Exception:
+        return pd.DataFrame(columns=["지표명", "설명"])
+# ====================================================================
+# Rest of Utility Functions
+# ====================================================================
 CODE_CANDIDATES = ["코드", "지역구코드", "선거구코드", "지역코드", "code", "CODE"]
 NAME_CANDIDATES = ["지역구", "선거구", "선거구명", "지역명", "district", "지역구명", "region", "지역"]
 SIDO_CANDIDATES = ["시/도", "시도", "광역", "sido", "province"]
@@ -346,6 +378,9 @@ with st.spinner("데이터 불러오는 중..."):
     df_24    = ensure_code_col(load_results_2024(DATA_DIR))
     df_curr  = ensure_code_col(load_current_info(DATA_DIR))
     df_idx   = ensure_code_col(load_index_sample(DATA_DIR))
+    
+    # NEW: Load index description data
+    df_desc = load_index_descriptions(DATA_DIR)
 
 # --------------------------------
 # Page: 종합 (Summary Dashboard)
@@ -445,7 +480,6 @@ if menu == "종합":
     st.subheader("세부 지표별 상세 분석")
 
     # Indicator Groups Definition
-    # MODIFICATION 2: Added "진보당 지방선거 후보 수" to '주체역량'
     INDICATOR_GROUPS = {
         "유권자환경": ["유권자 수", "유동인구", "고령층 비율", "청년층 비율", "4-50대 비율", "2030여성 비율"],
         "정치지형": ["유동성A", "경합도A", "유동성B", "경합도B"],
@@ -453,11 +487,44 @@ if menu == "종합":
         "상대역량": ["현직 득표력", "민주당 득표력", "보수 득표력"],
     }
     
-    tab_titles = list(INDICATOR_GROUPS.keys())
-    tabs = st.tabs(tab_titles)
+    # --------------------------------------------------------------------
+    # NEW LOGIC START: Index Descriptions Tab
+    # --------------------------------------------------------------------
+    st.markdown("##### 🔍 지표 설명") # Sub-heading for the description section
     
-    # Render content for each tab
-    for selected_group, tab in zip(tab_titles, tabs):
+    if df_desc.empty:
+        st.info("`data/index.csv`에서 지표 설명을 불러오지 못했습니다. 파일 경로 및 형식을 확인해 주세요.")
+    else:
+        # Create a dictionary for easy lookup: Indicator Name -> Description
+        desc_map = df_desc.set_index("지표명")["설명"].to_dict()
+
+        tab_titles = list(INDICATOR_GROUPS.keys())
+        tabs = st.tabs(tab_titles)
+        
+        # Render content for each description tab
+        for selected_group, tab in zip(tab_titles, tabs):
+            with tab:
+                target_cols = INDICATOR_GROUPS.get(selected_group, [])
+                markdown_list = []
+                
+                for indicator in target_cols:
+                    description = desc_map.get(indicator, f"'{indicator}' 지표에 대한 설명이 없습니다.")
+                    # Format as a bullet point list
+                    markdown_list.append(f"**- {indicator}:** {description}")
+                    
+                st.markdown("\n".join(markdown_list))
+
+    st.divider() # New divider to separate Description from Detailed Table
+    st.markdown("##### 📈 지표별 데이터 (Text-Only Table)") # Sub-heading for the detailed data table
+    
+    # --------------------------------------------------------------------
+    # EXISTING LOGIC: Detailed Index Table (Numerical Data)
+    # --------------------------------------------------------------------
+    tab_titles_table = list(INDICATOR_GROUPS.keys())
+    tabs_table = st.tabs([t + " 데이터" for t in tab_titles_table]) # Changed tab names for the table view
+    
+    # Render content for each data table tab
+    for selected_group, tab in zip(tab_titles_table, tabs_table):
         with tab:
             target_cols = INDICATOR_GROUPS.get(selected_group, [])
             
@@ -478,7 +545,7 @@ if menu == "종합":
                 present_cols = [c for c in target_cols if c in df_display.columns]
                 
                 if not present_cols:
-                    # NOTE: This message will appear if '진보당 지방선거 후보 수' is missing from index_sample.csv
+                    # NOTE: This message will appear if a column is missing from index_sample.csv
                     st.info(f"선택된 그룹 ({selected_group})에 해당하는 컬럼이 데이터에 없습니다.")
                 else:
                     df_final = df_display.loc[:, [label_col_new, "코드"] + present_cols].copy()
