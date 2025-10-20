@@ -233,7 +233,9 @@ def render_population_box(
         })
 
 # =========================================================
-# (2) Age Composition (Half donut) – responsive donut + responsive text panel
+# (2) Age Composition (Half donut) – center text inside chart
+# - Horizontal position responsive via Vega signal: x = {"expr":"width/2"}
+# - Vertical position fixed via y = alt.value(...)
 # TUNE: inner/outer radius, height, colors.
 # =========================================================
 def render_age_highlight_chart(pop_sel: pd.DataFrame, *, bookmark_map: dict | None = None, box_height_px: int = 240):
@@ -312,22 +314,37 @@ def render_age_highlight_chart(pop_sel: pd.DataFrame, *, bookmark_map: dict | No
         .configure_view(stroke=None)
     )
 
-    st.altair_chart(base, use_container_width=True, theme=None)  # responsive donut
-
-    # --- Responsive text panel (centered, below chart)
+    # --- Center texts as layers (x responsive, y fixed)
     idx = labels_order.index(focus)
     pct_txt = f"{(ratios100[idx]):.2f}%"
     focus_lbl = {"청년층(18~39세)":"청년층(18~39세)", "중년층(40~59세)":"중년층(40~59세)", "고령층(65세 이상)":"고령층(65세 이상)"}\
                 .get(focus, focus)
-    st.markdown(
-        f"""
-        <div style="text-align:center; margin-top:4px;">
-          <div style="font-size:28px; font-weight:800; color:#0f172a; line-height:1;">{pct_txt}</div>
-          <div style="font-size:14px; color:#475569;">{focus_lbl}</div>
-        </div>
-        """,
-        unsafe_allow_html=True
+
+    NUM_FONT, LBL_FONT = 28, 14     # TUNE: font sizes
+    y_num = H/2 + 2                 # TUNE: vertical position
+    y_lbl = H/2 + 28                # TUNE: vertical position
+
+    # NOTE: Use Vega signal for horizontal centering (responsive): {"expr":"width/2"}
+    num_text = (
+        alt.Chart(pd.DataFrame({"t":[pct_txt]}), height=H)
+        .mark_text(fontWeight="bold", fontSize=NUM_FONT, color="#0f172a")
+        .encode(
+            x={"expr": "width/2"},
+            y=alt.value(y_num),
+            text="t:N"
+        )
     )
+    lbl_text = (
+        alt.Chart(pd.DataFrame({"t":[focus_lbl]}), height=H)
+        .mark_text(fontSize=LBL_FONT, color="#475569", baseline="top")
+        .encode(
+            x={"expr": "width/2"},
+            y=alt.value(y_lbl),
+            text="t:N"
+        )
+    )
+
+    st.altair_chart((base + num_text + lbl_text), use_container_width=True, theme=None)
 
 # =========================================================
 # Sex ratio by age – horizontal bars
@@ -365,8 +382,7 @@ def render_sex_ratio_bar(pop_sel: pd.DataFrame, *, bookmark_map: dict | None = N
     label_map = {"20대":"18–29세","30대":"30대","40대":"40대","50대":"50대","60대":"60대","70대 이상":"70대 이상"}
     tidy["연령대표시"] = tidy["연령대"].map(label_map)
 
-    # --- FIX: x-axis ticks at every 10% --- #
-    tick_values = [0.0, 0.1, 0.2, 0.3]  # TUNE: add 0.4 if you extend domain to 40%
+    tick_values = [0.0, 0.1, 0.2, 0.3]  # TUNE: 10% ticks
 
     bar_size = 30  # TUNE: bar thickness (px)
     bars = (
@@ -376,12 +392,12 @@ def render_sex_ratio_bar(pop_sel: pd.DataFrame, *, bookmark_map: dict | None = N
             y=alt.Y("연령대표시:N", sort=[label_map[a] for a in age_buckets], title=None),
             x=alt.X(
                 "전체비중:Q",
-                scale=alt.Scale(domain=[0, 0.30]),  # TUNE: keep max at 30%
+                scale=alt.Scale(domain=[0, 0.30]),
                 axis=alt.Axis(
                     format=".0%",
                     title="전체 기준 구성비(%)",
-                    values=tick_values,        # <-- 10% ticks
-                    tickMinStep=0.1,           # <-- ensure step is 0.1
+                    values=tick_values,
+                    tickMinStep=0.1,
                     grid=True
                 )
             ),
@@ -402,7 +418,7 @@ def render_sex_ratio_bar(pop_sel: pd.DataFrame, *, bookmark_map: dict | None = N
     st.altair_chart(bars, use_container_width=True, theme=None)
 
 # =========================================================
-# (3) Vote trend – remove default tooltips (e.g., sort_index), keep only ours
+# (3) Vote trend – remove default tooltips on non-point layers (fix TypeError)
 # TUNE: ORDER_LABELS, legend orientation, line width, point size.
 # =========================================================
 def render_vote_trend_chart(ts_sel: pd.DataFrame, ts_all: pd.DataFrame | None = None, *, box_height_px: int = 420):
@@ -476,15 +492,14 @@ def render_vote_trend_chart(ts_sel: pd.DataFrame, ts_all: pd.DataFrame | None = 
 
         base = alt.Chart(long_df)
 
-        # --- turn OFF default tooltips here (so no sort_index etc.)
+        # --- IMPORTANT: do NOT pass tooltip=None (older Altair throws TypeError). Just omit tooltip.
         lines = base.mark_line(point=False, strokeWidth=2).encode(
             x=x_shared,
             y=alt.Y("득표율:Q", axis=alt.Axis(title="득표율(%)")),
             color=alt.Color("계열:N",
                             scale=alt.Scale(domain=party_order, range=colors),
                             legend=alt.Legend(title=None, orient="top", direction="horizontal", columns=4)),
-            detail="계열:N",
-            tooltip=None
+            detail="계열:N"
         )
 
         sel = alt.selection_point(fields=["선거명_표시","계열"], nearest=True, on="pointerover", empty=False)
@@ -492,8 +507,7 @@ def render_vote_trend_chart(ts_sel: pd.DataFrame, ts_all: pd.DataFrame | None = 
         hit = base.mark_circle(size=650, opacity=0).encode(
             x=x_shared, y="득표율:Q",
             color=alt.Color("계열:N", scale=alt.Scale(domain=party_order, range=colors), legend=None),
-            detail="계열:N",
-            tooltip=None
+            detail="계열:N"
         ).add_params(sel)
 
         # --- only this layer provides a tooltip (our fields only)
@@ -624,67 +638,7 @@ def render_results_2024_card(res_sel: pd.DataFrame | None, *, df_24_all: pd.Data
         html_component(html, height=250, scrolling=False)
 
 # =========================================================
-# Incumbent card
-# =========================================================
-def render_incumbent_card(cur_sel: pd.DataFrame | None):
-    with st.container(border=True, height="stretch"):
-        st.markdown("**현직정보**")
-        if cur_sel is None or cur_sel.empty:
-            st.info("현직 정보 데이터가 없습니다.")
-            return
-
-        cur_row = _norm_cols(cur_sel)
-        r = cur_row.iloc[0]
-
-        name_col = next((c for c in ["의원명", "이름", "성명"] if c in cur_row.columns), None)
-        party_col = next((c for c in ["정당", "소속정당"] if c in cur_row.columns), None)
-        term_col = next((c for c in ["선수", "당선횟수"] if c in cur_row.columns), None)
-        age_col = next((c for c in ["연령", "나이"] if c in cur_row.columns), None)
-        gender_col = next((c for c in ["성별"] if c in cur_row.columns), None)
-
-        career_cols = [c for c in ["최근경력", "주요경력", "경력", "이력", "최근 활동"] if c in cur_row.columns]
-        raw = None
-        for c in career_cols:
-            v = str(r.get(c))
-            if v and v.lower() not in ("nan", "none"):
-                raw = v; break
-
-        def _split(s: str) -> list[str]:
-            if not s: return []
-            return [p.strip() for p in re.split(r"[;\n•·/]+", s) if p.strip()]
-
-        items = _split(raw)
-
-        name = str(r.get(name_col, "정보없음")) if name_col else "정보없음"
-        party = str(r.get(party_col, "정당미상")) if party_col else "정당미상"
-        term = str(r.get(term_col, "N/A")) if term_col else "N/A"
-        gender = str(r.get(gender_col, "N/A")) if gender_col else "N/A"
-        age = str(r.get(age_col, "N/A")) if age_col else "N/A"
-
-        fg, bg = ("#334155", "rgba(51,65,85,.08)")
-        if party:
-            fg, bg = _party_chip_color(party)
-
-        items_html = "".join([f"<li>{p}</li>" for p in items])
-        html = f"""
-        <div style="display:flex; flex-direction:column; gap:8px; margin-top:2px; padding:0 8px;">
-          <div style="display:flex; flex-wrap:wrap; align-items:center; gap:8px;">
-            <div style="font-weight:700; color:#111827;">{name}</div>
-            <div style="display:inline-flex; align-items:center; gap:6px; padding:4px 10px; border-radius:999px; font-weight:600; color:{fg}; background:{bg};">
-              {party}
-            </div>
-          </div>
-          <ul style="margin:0; padding-left:1.1rem; color:#374151;">
-            <li>선수: {term}</li><li>성별: {gender}</li><li>연령: {age}</li>
-            {"<li>최근 경력</li><ul style='margin:.2rem 0 0 0.1rem;'>"+items_html+"</ul>" if items_html else ""}
-          </ul>
-        </div>
-        """
-        from streamlit.components.v1 import html as html_component
-        html_component(html, height=250, scrolling=False)
-
-# =========================================================
-# Progressive party box (KPI + mini two-bar)
+# Progressive party box (KPI + mini two-bar) – unchanged logic
 # =========================================================
 def render_prg_party_box(prg_sel: pd.DataFrame | None, *, df_idx_all: pd.DataFrame | None = None):
     with st.container(border=True, height="stretch"):
