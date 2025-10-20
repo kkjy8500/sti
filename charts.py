@@ -300,14 +300,16 @@ def render_age_highlight_chart(pop_sel: pd.DataFrame, *, bookmark_map: dict | No
         st.info("연령 구성 데이터가 없습니다.")
         return
 
-    # --- Key labels ---
     Y, M, O = "청년층(18~39세)", "중년층(40~59세)", "고령층(65세 이상)"
 
-    # --- total column auto detect ---
+    # total_voters detection (optional)
     total_col = None
     try:
-        total_col = _col(df, bookmark_map, "total_voters",
-                         ["전체 유권자", "유권자수", "선거인수", "total_voters"], required=False)
+        total_col = _col(
+            df, bookmark_map, "total_voters",
+            ["전체 유권자", "전체 유권자 수", "전체유권자", "전체 유권자수", "전체유권자수", "유권자수", "선거인수", "total_voters"],
+            required=False
+        )
     except Exception:
         total_col = None
 
@@ -316,90 +318,90 @@ def render_age_highlight_chart(pop_sel: pd.DataFrame, *, bookmark_map: dict | No
             st.info(f"연령대 컬럼이 없습니다: {c}")
             return
 
-    # --- numeric cast ---
-    def _num(v):
+    def _to_num_strict(v) -> float:
+        s = str(v)
+        s = re.sub(r"[^\d\.\-]", "", s)
+        if s in ("", ".", "-", "-.", ".-"):
+            return 0.0
         try:
-            return float(str(v).replace(",", "").replace("%", "").strip())
+            return float(s)
         except Exception:
             return 0.0
 
-    for c in [Y, M, O] + ([total_col] if total_col else []):
-        df[c] = df[c].apply(_num).fillna(0.0)
+    cols_to_cast = [Y, M, O] + ([total_col] if total_col else [])
+    for c in cols_to_cast:
+        df[c] = df[c].apply(_to_num_strict).fillna(0.0)
 
-    y, m, o = df[Y].sum(), df[M].sum(), df[O].sum()
-    tot = df[total_col].sum() if total_col else y + m + o
+    y, m, o = float(df[Y].sum()), float(df[M].sum()), float(df[O].sum())
+    tot = float(df[total_col].sum()) if total_col else 0.0
     if tot <= 0:
-        st.info("유효한 전체 유권자 수가 없습니다.")
+        tot = y + m + o
+        st.caption("ℹ️ '전체 유권자'가 0으로 파싱되어 연령 합계(청+중+고)로 분모를 대체했습니다.")
+    if tot <= 0:
+        st.info("전체 유권자 수(분모)가 0입니다.")
         return
 
     mid_60_64 = max(0.0, tot - (y + m + o))
-    labels = [Y, M, "60–64세", O]
+    labels_order = [Y, M, "60–64세", O]
     values = [y, m, mid_60_64, o]
-    ratios = [v / tot for v in values]
-    ratios100 = [r * 100 for r in ratios]
+    ratios01  = [v/tot for v in values]
+    ratios100 = [r*100 for r in ratios01]
 
     focus = st.radio("강조", [Y, M, O], index=0, horizontal=True, label_visibility="collapsed")
-    st.markdown("<div style='height:6px;'></div>", unsafe_allow_html=True)
+    st.markdown("<div style='height: 6px;'></div>", unsafe_allow_html=True)
+
+    inner_r, outer_r = 68, 106         # TUNE: donut radii
+    W = 320                             # TUNE: chart width (px)
+    H = max(220, int(box_height_px))    # TUNE: chart height (px)
 
     df_vis = pd.DataFrame({
-        "연령": labels,
-        "비율": ratios,
-        "표시비율": ratios100,
-        "강조": [l == focus for l in labels],
-        "순서": [1, 2, 3, 4],
+        "연령": labels_order, "명": values, "비율": ratios01, "표시비율": ratios100,
+        "강조": [l == focus for l in labels_order], "순서": [1, 2, 3, 4],
     })
 
-    # =======================================================
-    # 🟦 반원 도넛 (상단 유지, 전체적으로 살짝 아래 배치)
-    # =======================================================
-    donut = (
-        alt.Chart(df_vis)
-        .mark_arc(innerRadius=70, outerRadius=110, cornerRadius=6, stroke="white", strokeWidth=1)
+    # --- Donut (autosize: fit) ---
+    base = (
+        alt.Chart(df_vis, width=W, height=H)
+        .mark_arc(innerRadius=inner_r, outerRadius=outer_r, cornerRadius=6, stroke="white", strokeWidth=1)
         .encode(
-            theta=alt.Theta("비율:Q", stack=True, sort=None,
-                            scale=alt.Scale(range=[-math.pi/2, math.pi/2])),  # 상단 반원
+            theta=alt.Theta("비율:Q", stack=True, sort=None, scale=alt.Scale(range=[-math.pi/2, math.pi/2])),
             order=alt.Order("순서:Q"),
-            color=alt.Color("강조:N",
-                            scale=alt.Scale(domain=[True, False], range=["#1E6BFF", "#E5E7EB"]),
-                            legend=None),
+            color=alt.Color("강조:N", scale=alt.Scale(domain=[True, False], range=["#1E6BFF", "#E5E7EB"]), legend=None),
             tooltip=[
                 alt.Tooltip("연령:N", title="연령대"),
+                alt.Tooltip("명:Q", title="인원", format=",.0f"),
                 alt.Tooltip("표시비율:Q", title="비율(%)", format=".2f"),
             ],
         )
-        .properties(
-            height=box_height_px,
-            padding={"top": 0, "bottom": 0, "left": 0, "right": 0},
-        )
-        .transform_calculate(
-            # ⚙️ 도넛 자체를 약간 아래로 내리기 위한 보정 (height * 0.48)
-            cy="height * 0.48"
-        )
+        .properties(autosize=alt.AutoSizeParams(type="fit"))  # ✅ make donut responsive
     )
 
-    # =======================================================
-    # 🟨 텍스트: 도넛 중심 기준 아래 정렬
-    # =======================================================
     label_map = {Y: "청년층(18~39세)", M: "중년층(40~59세)", O: "고령층(65세 이상)"}
-    pct_txt = f"{ratios100[labels.index(focus)]:.2f}%"
-    lbl_txt = label_map.get(focus, focus)
-    text_df = pd.DataFrame({"pct": [pct_txt], "lbl": [lbl_txt]})
+    idx = labels_order.index(focus)
+    pct_txt = f"{(ratios100[idx]):.2f}%"
 
-    # 숫자: 도넛 중심 기준 (height*0.48)
-    num_layer = (
-        alt.Chart(text_df)
-        .transform_calculate(cx="width/2", cy="height*0.48")
-        .mark_text(fontSize=28, fontWeight="bold", color="#0f172a",
-                   align="center", baseline="middle")
-        .encode(x="cx:Q", y="cy:Q", text="pct:N")
+    NUM_FONT, LBL_FONT = 28, 14         # TUNE: center text font sizes
+    center_y = H / 2
+
+    # --- Center number (autosize: fit) ---
+    num_text = (
+        alt.Chart(pd.DataFrame({"t":[pct_txt]}), width=W, height=H)
+        .mark_text(fontWeight="bold", fontSize=NUM_FONT, color="#0f172a")
+        .encode(text="t:N", x=alt.value(W/2), y=alt.value(center_y + 2))
+        .properties(autosize=alt.AutoSizeParams(type="fit"))  # ✅ make text responsive
     )
 
-    # 라벨: 숫자 바로 아래 (height*0.48 + 24)
-    lbl_layer = (
-        alt.Chart(text_df)
-        .transform_calculate(cx="width/2", cy="height*0.48 + 24")
-        .mark_text(fontSize=14, color="#475569", align="center", baseline="top")
-        .encode(x="cx:Q", y="cy:Q", text="lbl:N")
+    # --- Center label (autosize: fit) ---
+    lbl_text = (
+        alt.Chart(pd.DataFrame({"t":[label_map.get(focus, focus)]}), width=W, height=H)
+        .mark_text(fontSize=LBL_FONT, color="#475569", baseline="top")
+        .encode(text="t:N", x=alt.value(W/2), y=alt.value(center_y + 28))
+        .properties(autosize=alt.AutoSizeParams(type="fit"))  # ✅ make text responsive
+    )
+
+    st.altair_chart(
+        (base + num_text + lbl_text).configure_view(stroke=None),
+        use_container_width=True, theme=None
     )
 
     # =======================================================
@@ -894,6 +896,7 @@ def render_region_detail_layout(
             render_incumbent_card(df_cur_sel)
         with c3.container(height="stretch"):
             render_prg_party_box(df_idx_sel, df_idx_all=df_idx_all)
+
 
 
 
