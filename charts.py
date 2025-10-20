@@ -308,7 +308,7 @@ def render_age_highlight_chart(pop_sel: pd.DataFrame, *, bookmark_map: dict | No
 
     inner_r, outer_r = 68, 106         # TUNE: donut radii
     W = 320                              # TUNE: chart width (px)
-    H = max(220, int(box_height_px))     # TUNE: chart height (px)
+    H = max(220, int(box_height_px))     # TUNE: chart height (px))
 
     df_vis = pd.DataFrame({
         "연령": labels_order, "명": values, "비율": ratios01, "표시비율": ratios100,
@@ -355,7 +355,7 @@ def render_age_highlight_chart(pop_sel: pd.DataFrame, *, bookmark_map: dict | No
 
 # =========================================================
 # Sex ratio by age – horizontal bars
-# TUNE: x-axis max (0.30), bar_size, legend position/colors.
+# TUNE: x-axis ticks at every 10%, bar_size, legend position/colors.
 # =========================================================
 def render_sex_ratio_bar(pop_sel: pd.DataFrame, *, bookmark_map: dict | None = None, box_height_px: int = 340):
     if pop_sel is None or pop_sel.empty:
@@ -390,16 +390,30 @@ def render_sex_ratio_bar(pop_sel: pd.DataFrame, *, bookmark_map: dict | None = N
     tidy["연령대표시"] = tidy["연령대"].map(label_map)
 
     bar_size = 30  # TUNE: bar thickness (px)
+
+    # ===== 10% ticks (0, 10, 20, 30) =====
+    tick_values = [0.0, 0.1, 0.2, 0.3]  # TUNE: adjust if domain changes
     bars = (
         alt.Chart(tidy)
         .mark_bar(size=bar_size)
         .encode(
             y=alt.Y("연령대표시:N", sort=[label_map[a] for a in age_buckets], title=None),
-            x=alt.X("전체비중:Q", scale=alt.Scale(domain=[0, 0.30]), axis=alt.Axis(format=".0%", title="전체 기준 구성비(%)", grid=True)),
-            color=alt.Color("성별:N", 
-                            scale=alt.Scale(domain=["남성","여성"], 
-                                            range=["#4DA6B7", "#85C1E9"]),  # TUNE: male/female colors
-                            legend=alt.Legend(title=None, orient="top")),
+            x=alt.X(
+                "전체비중:Q",
+                scale=alt.Scale(domain=[0, 0.30]),
+                axis=alt.Axis(
+                    format=".0%",
+                    title="전체 기준 구성비(%)",
+                    values=tick_values,     # <-- fixed 10% ticks
+                    tickMinStep=0.1,        # TUNE: force 10% step
+                    grid=True
+                )
+            ),
+            color=alt.Color(
+                "성별:N",
+                scale=alt.Scale(domain=["남성","여성"], range=["#4DA6B7", "#85C1E9"]),  # TUNE: male/female colors
+                legend=alt.Legend(title=None, orient="top")
+            ),
             tooltip=[
                 alt.Tooltip("연령대표시:N", title="연령대"),
                 alt.Tooltip("성별:N", title="성별"),
@@ -483,13 +497,16 @@ def render_vote_trend_chart(ts_sel: pd.DataFrame, ts_all: pd.DataFrame | None = 
         )
 
         base = alt.Chart(long_df)
+
+        # IMPORTANT: remove default tooltip on non-point layers by setting tooltip=[]
         lines = base.mark_line(point=False, strokeWidth=2).encode(
             x=x_shared,
             y=alt.Y("득표율:Q", axis=alt.Axis(title="득표율(%)")),
             color=alt.Color("계열:N",
                             scale=alt.Scale(domain=party_order, range=colors),
                             legend=alt.Legend(title=None, orient="top", direction="horizontal", columns=4)),
-            detail="계열:N"
+            detail="계열:N",
+            tooltip=[]  # <-- no default tooltip on lines (TUNE)
         )
 
         sel = alt.selection_point(fields=["선거명_표시","계열"], nearest=True, on="pointerover", empty=False)
@@ -497,7 +514,8 @@ def render_vote_trend_chart(ts_sel: pd.DataFrame, ts_all: pd.DataFrame | None = 
         hit = base.mark_circle(size=650, opacity=0).encode(
             x=x_shared, y="득표율:Q",
             color=alt.Color("계열:N", scale=alt.Scale(domain=party_order, range=colors), legend=None),
-            detail="계열:N"
+            detail="계열:N",
+            tooltip=[]  # <-- no default tooltip on invisible hit layer (TUNE)
         ).add_params(sel)
 
         pts = base.mark_circle(size=120).encode(
@@ -505,9 +523,11 @@ def render_vote_trend_chart(ts_sel: pd.DataFrame, ts_all: pd.DataFrame | None = 
             color=alt.Color("계열:N", scale=alt.Scale(domain=party_order, range=colors), legend=None),
             opacity=alt.condition(sel, alt.value(1), alt.value(0)),
             detail="계열:N",
-            tooltip=[alt.Tooltip("선거명_표시:N", title="선거명"),
-                     alt.Tooltip("계열:N", title="계열"),
-                     alt.Tooltip("득표율:Q", title="득표율(%)", format=".2f")]
+            tooltip=[  # <-- only this tooltip remains
+                alt.Tooltip("선거명_표시:N", title="선거명"),
+                alt.Tooltip("계열:N", title="계열"),
+                alt.Tooltip("득표율:Q", title="득표율(%)", format=".2f"),
+            ],
         ).transform_filter(sel)
 
         zoomX = alt.selection_interval(bind='scales', encodings=['x'])
