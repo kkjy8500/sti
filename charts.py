@@ -805,14 +805,28 @@ def render_prg_party_box(prg_sel: pd.DataFrame | None, *, df_idx_all: pd.DataFra
                     .encode(
                         x=alt.X(
                             "값:Q",
-                            axis=alt.Axis(title=None, format=".0%", values=[v/100 for v in range(0, 101, 2)]),
-                            scale=alt.Scale(domain=[0, 0.1], nice=False)
+                            axis=alt.Axis(
+                                title=None,
+                                format=".0%",
+                                values=[v / 100 for v in range(0, 101, 2)]
+                            ),
+                            scale=alt.Scale(domain=[0, 0.1], nice=False),
                         ),
                         y=alt.Y("항목:N", title=None, sort=["해당 지역", "10개 평균"]),
-                        color=alt.Color("색상:N", scale=None, legend=None),
-                        tooltip=[alt.Tooltip("항목:N"), alt.Tooltip("값:Q", format=".2%")]
+                        color=alt.condition(
+                            alt.datum["항목"] == "해당 지역",
+                            alt.value(COLOR_BLUE),
+                            alt.value(COLOR_GRAY),
+                        ),
+                        tooltip=[
+                            alt.Tooltip("항목:N", title="구분"),
+                            alt.Tooltip("값:Q", title="비율", format=".2%"),
+                        ],
                     )
-                    .properties(height=110, padding={"top":0,"bottom":0,"left":0,"right":0})
+                    .properties(
+                        height=110,
+                        padding={"top": 0, "bottom": 0, "left": 0, "right": 0},
+                    )
                     .configure_view(stroke=None)
                 )
                 st.altair_chart(mini, use_container_width=True, theme=None)
@@ -864,6 +878,7 @@ def render_region_detail_layout(
             render_incumbent_card(df_cur_sel)
         with c3.container(height="stretch"):
             render_prg_party_box(df_idx_sel, df_idx_all=df_idx_all)
+
 
 
 
