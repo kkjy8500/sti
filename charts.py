@@ -251,6 +251,9 @@ def render_population_box(
 # TUNE: inner/outer radius, fonts, center offsets, chart width/height.
 # =========================================================
 def render_age_highlight_chart(pop_sel: pd.DataFrame, *, bookmark_map: dict | None = None, box_height_px: int = 240):
+    # -----------------------------
+    # [Load & guards]
+    # -----------------------------
     df = _norm_cols(pop_sel.copy()) if pop_sel is not None else pd.DataFrame()
     if df.empty:
         st.info("연령 구성 데이터가 없습니다.")
@@ -258,7 +261,7 @@ def render_age_highlight_chart(pop_sel: pd.DataFrame, *, bookmark_map: dict | No
 
     Y, M, O = "청년층(18~39세)", "중년층(40~59세)", "고령층(65세 이상)"
 
-    # total_voters detection (optional)
+    # optional total voters
     total_col = None
     try:
         total_col = _col(
@@ -274,6 +277,9 @@ def render_age_highlight_chart(pop_sel: pd.DataFrame, *, bookmark_map: dict | No
             st.info(f"연령대 컬럼이 없습니다: {c}")
             return
 
+    # -----------------------------
+    # [Casting helpers]
+    # -----------------------------
     def _to_num_strict(v) -> float:
         s = str(v)
         s = re.sub(r"[^\d\.\-]", "", s)
@@ -297,31 +303,56 @@ def render_age_highlight_chart(pop_sel: pd.DataFrame, *, bookmark_map: dict | No
         st.info("전체 유권자 수(분모)가 0입니다.")
         return
 
+    # 60–64 보정(있으면 분리, 없으면 0)
     mid_60_64 = max(0.0, tot - (y + m + o))
-    labels_order = [Y, M, "60–64세", O]
-    values = [y, m, mid_60_64, o]
-    ratios01  = [v/tot for v in values]
-    ratios100 = [r*100 for r in ratios01]
 
+    # -----------------------------
+    # [Ordering & ratios]
+    # - Keep fixed order: 청년층 → 중년층 → 60–64세 → 고령층
+    # -----------------------------
+    labels_order = [Y, M, "60–64세", O]
+    values      = [y, m, mid_60_64, o]
+    ratios01    = [v / tot for v in values]
+    ratios100   = [r * 100 for r in ratios01]
+
+    # -----------------------------
+    # [Focus selector]
+    # -----------------------------
     focus = st.radio("강조", [Y, M, O], index=0, horizontal=True, label_visibility="collapsed")
     st.markdown("<div style='height: 6px;'></div>", unsafe_allow_html=True)
 
+    # -----------------------------
+    # [Sizing knobs]  # TUNE: edit radii/height for look & feel
+    # -----------------------------
     inner_r, outer_r = 70, 110         # TUNE: donut radii
-    W = 320
-    H = max(220, int(box_height_px))     # TUNE: chart height (px)
+    H = max(220, int(box_height_px))   # TUNE: chart height (px)
 
+    # -----------------------------
+    # [Vis dataframe]
+    # -----------------------------
     df_vis = pd.DataFrame({
-        "연령": labels_order, "명": values, "비율": ratios01, "표시비율": ratios100,
-        "강조": [l == focus for l in labels_order], "순서": [1, 2, 3, 4],
+        "연령": labels_order,
+        "명": values,
+        "비율": ratios01,
+        "표시비율": ratios100,
+        "강조": [l == focus for l in labels_order],
+        "순서": [1, 2, 3, 4],
     })
 
+    # -----------------------------
+    # [Donut (half)]
+    # - All layers use width="container" & height=H for consistency.
+    # -----------------------------
     base = (
         alt.Chart(df_vis, width="container", height=H)
         .mark_arc(innerRadius=inner_r, outerRadius=outer_r, cornerRadius=6, stroke="white", strokeWidth=1)
         .encode(
-            theta=alt.Theta("비율:Q", stack=True, sort=None, scale=alt.Scale(range=[-math.pi/2, math.pi/2])),
+            theta=alt.Theta("비율:Q", stack=True, sort=None,
+                            scale=alt.Scale(range=[-math.pi/2, math.pi/2])),  # half donut
             order=alt.Order("순서:Q"),
-            color=alt.Color("강조:N", scale=alt.Scale(domain=[True, False], range=["#1E6BFF", "#E5E7EB"]), legend=None),
+            color=alt.Color("강조:N",
+                            scale=alt.Scale(domain=[True, False], range=["#1E6BFF", "#E5E7EB"]),
+                            legend=None),
             tooltip=[
                 alt.Tooltip("연령:N", title="연령대"),
                 alt.Tooltip("명:Q", title="인원", format=",.0f"),
@@ -330,29 +361,48 @@ def render_age_highlight_chart(pop_sel: pd.DataFrame, *, bookmark_map: dict | No
         )
     )
 
-    label_map = {Y: "청년층(18~39세)", M: "중년층(40~59세)", O: "고령층(65세 이상)"}
+    # -----------------------------
+    # [Center texts] (responsive)
+    # - Use signals 'width'/'height' via transform_calculate so x/y follow container size.
+    # - Keep all layers width="container", height=H to avoid Altair "inconsistent values" errors.
+    # -----------------------------
+    label_map = {
+        Y: "청년층(18~39세)",
+        M: "중년층(40~59세)",
+        O: "고령층(65세 이상)",
+    }
     idx = labels_order.index(focus)
     pct_txt = f"{(ratios100[idx]):.2f}%"
+    lbl_txt = label_map.get(focus, focus)
 
-    NUM_FONT, LBL_FONT = 28, 14         # TUNE: center text font sizes
-    center_y = H / 2
+    center_df = pd.DataFrame({"pct": [pct_txt], "lbl": [lbl_txt]})
+
+    NUM_FONT, LBL_FONT = 28, 14  # TUNE: center text sizes
 
     num_text = (
-        alt.Chart(pd.DataFrame({"t": [pct_txt]}))
+        alt.Chart(center_df, width="container", height=H)
+        .transform_calculate(cx="width/2", cy="height/2")  # responsive center
         .mark_text(fontWeight="bold", fontSize=NUM_FONT, color="#0f172a")
-        .encode(text="t:N", x=alt.value(0), y=alt.value(center_y + 2))
-        .properties(width="container", height=H)
-    )
-    lbl_text = (
-        alt.Chart(pd.DataFrame({"t":[label_map.get(focus, focus)]}), width=W, height=H)
-        .mark_text(fontSize=LBL_FONT, color="#475569", baseline="top")
-        .encode(text="t:N", x=alt.value(W/2), y=alt.value(center_y + 28))
+        .encode(text="pct:N", x=alt.X("cx:Q"), y=alt.Y("cy:Q"))
     )
 
-    st.altair_chart(
-        (base + num_text + lbl_text).properties(autosize=alt.AutoSizeParams(type="pad")).configure_view(stroke=None),
-        use_container_width=True, theme=None
+    lbl_text = (
+        alt.Chart(center_df, width="container", height=H)
+        .transform_calculate(cx="width/2", cy="height/2")
+        .mark_text(fontSize=LBL_FONT, color="#475569", baseline="top", dy=22)  # TUNE: vertical gap under number
+        .encode(text="lbl:N", x=alt.X("cx:Q"), y=alt.Y("cy:Q"))
     )
+
+    # -----------------------------
+    # [Render]
+    # -----------------------------
+    chart = alt.layer(base, num_text, lbl_text).properties(
+        width="container",  # keep consistent
+        height=H,
+        autosize=alt.AutoSizeParams(type="pad")  # TUNE: "fit" also works; "pad" is stable in Streamlit
+    ).configure_view(stroke=None)
+
+    st.altair_chart(chart, use_container_width=True, theme=None)
 
 # =========================================================
 # Sex ratio by age – horizontal bars
@@ -814,6 +864,7 @@ def render_region_detail_layout(
             render_incumbent_card(df_cur_sel)
         with c3.container(height="stretch"):
             render_prg_party_box(df_idx_sel, df_idx_all=df_idx_all)
+
 
 
 
