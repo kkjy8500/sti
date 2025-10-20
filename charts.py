@@ -307,6 +307,7 @@ def render_age_highlight_chart(pop_sel: pd.DataFrame, *, bookmark_map: dict | No
     st.markdown("<div style='height: 6px;'></div>", unsafe_allow_html=True)
 
     inner_r, outer_r = 70, 110         # TUNE: donut radii
+    W = 320
     H = max(220, int(box_height_px))     # TUNE: chart height (px)
 
     df_vis = pd.DataFrame({
@@ -315,7 +316,7 @@ def render_age_highlight_chart(pop_sel: pd.DataFrame, *, bookmark_map: dict | No
     })
 
     base = (
-        alt.Chart(df_vis, width=W, height=H)
+        alt.Chart(df_vis, height=H)
         .mark_arc(innerRadius=inner_r, outerRadius=outer_r, cornerRadius=6, stroke="white", strokeWidth=1)
         .encode(
             theta=alt.Theta("비율:Q", stack=True, sort=None, scale=alt.Scale(range=[-math.pi/2, math.pi/2])),
@@ -812,5 +813,6 @@ def render_region_detail_layout(
             render_incumbent_card(df_cur_sel)
         with c3.container(height="stretch"):
             render_prg_party_box(df_idx_sel, df_idx_all=df_idx_all)
+
 
 
