@@ -37,7 +37,7 @@ from charts import (
 # CONFIGURATION CONSTANTS (MUST BE DEFINED EARLY)
 # ====================================================================
 APP_TITLE = "지역구 선정 1단계 조사 결과"
-DATA_DIR = Path("data")  # [Edit later] Change if your data root moves.
+DATA_DIR = Path("data")  # [File root] change here if your relative data folder moves.
 
 # Absolute Scaling: Columns listed here will use the specified value as the 100% max score
 ABSOLUTE_MAX_SCORES = {
@@ -258,30 +258,35 @@ def _text_only_cell(val: float | object, col_name: str) -> str:
         f'</div>'
     )
 
-# ---------- [NEW] Minimal indicator description loader (data/index.csv only) ----------
+# ---------- [UPDATED] Minimal indicator description loader ----------
 @st.cache_data(show_spinner=False)
 def _read_index_desc_csv() -> pd.DataFrame:
     """
-    Minimal loader for data/index.csv only.
-    - Encoding tries: utf-8-sig -> utf-8
-    - If only 1 column, try TSV fallback once.
+    Minimal loader for indicator descriptions.
+    - Primary path: data/index.csv
+    - Fallback path: /mnt/data/index.csv  (uploaded file location)
+    - Encodings: utf-8-sig -> utf-8 -> cp949
+    - If only 1 column is detected, try TSV fallback once.
     """
-    p = DATA_DIR / "index.csv"  # [File path] keep single source – no assumptions to other files.
-    if not p.exists():
-        return pd.DataFrame()
-    # Try utf-8-sig then utf-8
-    for enc in ("utf-8-sig", "utf-8"):
-        try:
-            df = pd.read_csv(p, encoding=enc)
-            if df.shape[1] == 1:
-                # Possible TSV saved as .csv
-                try:
-                    df = pd.read_csv(p, encoding=enc, sep="\t")
-                except Exception:
-                    pass
-            return _normalize_columns(df)
-        except Exception:
+    # [Paths] Keep it minimal: just two explicit candidates (no other assumptions)
+    candidates = [DATA_DIR / "index.csv", Path("/mnt/data/index.csv")]
+    encodings = ("utf-8-sig", "utf-8", "cp949")  # [Encoding] extend if you later standardize differently
+
+    for p in candidates:
+        if not p.exists():
             continue
+        for enc in encodings:
+            try:
+                df = pd.read_csv(p, encoding=enc)
+                if df.shape[1] == 1:
+                    # Possible TSV saved as .csv
+                    try:
+                        df = pd.read_csv(p, encoding=enc, sep="\t")
+                    except Exception:
+                        pass
+                return _normalize_columns(df)
+            except Exception:
+                continue
     return pd.DataFrame()
 
 def _find_first_col(df: pd.DataFrame, candidates: list[str]) -> str | None:
@@ -465,7 +470,7 @@ if menu == "종합":
                     # ============================
                     st.divider()  # [Spacing] separator between data table & descriptions
 
-                    # Load index descriptions (data/index.csv only)
+                    # Load index descriptions (data/index.csv or /mnt/data/index.csv)
                     desc_df = _read_index_desc_csv()
                     name_col = _find_first_col(desc_df, ["지표", "지표명", "항목", "지표명칭", "indicator", "name"]) if not desc_df.empty else None
                     desc_col = _find_first_col(desc_df, ["설명", "정의", "지표설명", "description", "desc"]) if not desc_df.empty else None
@@ -474,7 +479,7 @@ if menu == "종합":
                     st.subheader(f"지표 설명 · {selected_group}")
 
                     if desc_df.empty or not name_col:
-                        st.info("`data/index.csv`에서 지표 설명을 불러오지 못했습니다. (경로/인코딩/구분자 확인)")
+                        st.info("`index.csv`에서 지표 설명을 불러오지 못했습니다. (경로/인코딩/구분자 확인)")
                     else:
                         present_set = set(present_cols)
                         df_desc = desc_df.copy()
@@ -482,7 +487,7 @@ if menu == "종합":
                         matched = df_desc[df_desc[name_col].isin(present_set)].copy()
 
                         if matched.empty:
-                            st.info("현재 탭의 컬럼명과 `data/index.csv`의 지표명이 일치하지 않습니다. 표기 통일이 필요합니다.")
+                            st.info("현재 탭의 컬럼명과 `index.csv`의 지표명이 일치하지 않습니다. 표기 통일이 필요합니다.")
                             st.caption(f"탭 컬럼: {', '.join(present_cols)}")
                         else:
                             show_cols = [name_col] + ([desc_col] if desc_col else []) + ([src_col] if src_col else [])
@@ -491,7 +496,6 @@ if menu == "종합":
                             except Exception:
                                 matched = matched.loc[:, show_cols].reset_index(drop=True)
 
-                            # Lightweight HTML table (no heavy styles)
                             head_src = '<th style="text-align:left;padding:8px 10px;">출처</th>' if src_col else ''
                             rows_html = []
                             for _, r in matched.iterrows():
