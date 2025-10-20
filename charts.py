@@ -79,11 +79,6 @@ def _render_topbar(page_title: str | None, app_title: str | None):
 
 # =========================================================
 # (1) Population Box – KPI + two-bars (Region vs 10-avg)
-# Why bars might not show (and fixes we apply):
-# - Missing total_voters column -> robust finder with Korean/English aliases.
-# - Non-numeric strings -> strict numeric casting; NaN-safe sums.
-# - X-domain <= 0 -> enforce small positive domain headroom.
-# - Over-tight bar size -> compute from container height (no rangeStep usage).
 # TUNE: box_height_px, bar thickness, colors below.
 # =========================================================
 def render_population_box(
@@ -239,10 +234,6 @@ def render_population_box(
 
 # =========================================================
 # (2) Age Composition (Half donut) – responsive donut + responsive text panel
-# Strategy:
-# - Make the donut itself responsive: omit explicit width, set autosize=fit, use_container_width=True.
-# - Keep center text as a separate markdown "text panel" right below (fully responsive & lightweight).
-#   (Altair center-with-signal can be heavier and brittle across containers.)
 # TUNE: inner/outer radius, height, colors.
 # =========================================================
 def render_age_highlight_chart(pop_sel: pd.DataFrame, *, bookmark_map: dict | None = None, box_height_px: int = 240):
@@ -340,7 +331,7 @@ def render_age_highlight_chart(pop_sel: pd.DataFrame, *, bookmark_map: dict | No
 
 # =========================================================
 # Sex ratio by age – horizontal bars
-# TUNE: x-axis max (0.30), bar_size, legend position/colors.
+# TUNE: x-axis max (0.30), bar_size, legend position/colors, tick values.
 # =========================================================
 def render_sex_ratio_bar(pop_sel: pd.DataFrame, *, bookmark_map: dict | None = None, box_height_px: int = 340):
     if pop_sel is None or pop_sel.empty:
@@ -374,14 +365,26 @@ def render_sex_ratio_bar(pop_sel: pd.DataFrame, *, bookmark_map: dict | None = N
     label_map = {"20대":"18–29세","30대":"30대","40대":"40대","50대":"50대","60대":"60대","70대 이상":"70대 이상"}
     tidy["연령대표시"] = tidy["연령대"].map(label_map)
 
+    # --- FIX: x-axis ticks at every 10% --- #
+    tick_values = [0.0, 0.1, 0.2, 0.3]  # TUNE: add 0.4 if you extend domain to 40%
+
     bar_size = 30  # TUNE: bar thickness (px)
     bars = (
         alt.Chart(tidy)
         .mark_bar(size=bar_size)
         .encode(
             y=alt.Y("연령대표시:N", sort=[label_map[a] for a in age_buckets], title=None),
-            x=alt.X("전체비중:Q", scale=alt.Scale(domain=[0, 0.30]),
-                    axis=alt.Axis(format=".0%", title="전체 기준 구성비(%)", grid=True)),
+            x=alt.X(
+                "전체비중:Q",
+                scale=alt.Scale(domain=[0, 0.30]),  # TUNE: keep max at 30%
+                axis=alt.Axis(
+                    format=".0%",
+                    title="전체 기준 구성비(%)",
+                    values=tick_values,        # <-- 10% ticks
+                    tickMinStep=0.1,           # <-- ensure step is 0.1
+                    grid=True
+                )
+            ),
             color=alt.Color("성별:N",
                             scale=alt.Scale(domain=["남성","여성"], range=["#4DA6B7", "#85C1E9"]),  # TUNE colors
                             legend=alt.Legend(title=None, orient="top")),
@@ -481,7 +484,7 @@ def render_vote_trend_chart(ts_sel: pd.DataFrame, ts_all: pd.DataFrame | None = 
                             scale=alt.Scale(domain=party_order, range=colors),
                             legend=alt.Legend(title=None, orient="top", direction="horizontal", columns=4)),
             detail="계열:N",
-            tooltip=None   # <-- disable defaults
+            tooltip=None
         )
 
         sel = alt.selection_point(fields=["선거명_표시","계열"], nearest=True, on="pointerover", empty=False)
@@ -490,7 +493,7 @@ def render_vote_trend_chart(ts_sel: pd.DataFrame, ts_all: pd.DataFrame | None = 
             x=x_shared, y="득표율:Q",
             color=alt.Color("계열:N", scale=alt.Scale(domain=party_order, range=colors), legend=None),
             detail="계열:N",
-            tooltip=None   # <-- disable defaults
+            tooltip=None
         ).add_params(sel)
 
         # --- only this layer provides a tooltip (our fields only)
@@ -511,7 +514,7 @@ def render_vote_trend_chart(ts_sel: pd.DataFrame, ts_all: pd.DataFrame | None = 
         st.altair_chart(chart, use_container_width=True, theme=None)
 
 # =========================================================
-# 2024 Results (simple card) – unchanged
+# 2024 Results (simple card)
 # =========================================================
 def _party_chip_color(name: str) -> tuple[str, str]:
     s = (name or "").strip()
@@ -621,7 +624,7 @@ def render_results_2024_card(res_sel: pd.DataFrame | None, *, df_24_all: pd.Data
         html_component(html, height=250, scrolling=False)
 
 # =========================================================
-# Incumbent card – unchanged
+# Incumbent card
 # =========================================================
 def render_incumbent_card(cur_sel: pd.DataFrame | None):
     with st.container(border=True, height="stretch"):
@@ -681,7 +684,7 @@ def render_incumbent_card(cur_sel: pd.DataFrame | None):
         html_component(html, height=250, scrolling=False)
 
 # =========================================================
-# Progressive party box (KPI + mini two-bar) – unchanged logic
+# Progressive party box (KPI + mini two-bar)
 # =========================================================
 def render_prg_party_box(prg_sel: pd.DataFrame | None, *, df_idx_all: pd.DataFrame | None = None):
     with st.container(border=True, height="stretch"):
