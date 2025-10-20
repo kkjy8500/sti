@@ -247,16 +247,11 @@ def render_population_box(
             if len(u) == 1:
                 current_selected_gu_name = str(u[0])
 
-        # 2-bar 데이터프레임 (NaN/inf 방지 및 dtype 명시)
         df_chart = pd.DataFrame({
-            "Category": [str(current_selected_gu_name), "10개 구 평균"],
+            "Category": [str(current_selected_gu_name), "10개 평균"],
             "VoterCount": [float(region_total), float(avg_total)],
             "Highlight": ["Selected", "Average"],
-        })
-        df_chart = df_chart.replace([pd.NA, float("inf"), float("-inf")], 0.0)
-
-        COLOR_BLUE = "#3B82F6"
-        COLOR_GRAY = "#6B7280"
+        }).replace([pd.NA, float("inf"), float("-inf")], 0.0)
 
         base = (
             alt.Chart(df_chart)
@@ -269,7 +264,6 @@ def render_population_box(
                 ],
             )
             .properties(
-                title="선택 지역 vs 10개 구 평균 유권자 수",
                 height=int(box_height_px * 1.5),
             )
         )
@@ -277,7 +271,7 @@ def render_population_box(
         bar_color = alt.Color(
             "Highlight:N",
             scale=alt.Scale(domain=["Selected", "Average"], range=[COLOR_BLUE, COLOR_GRAY]),
-            legend=alt.Legend(title="구분"),
+            legend=None,
         )
 
         bars = base.mark_bar(cornerRadiusEnd=3, width=50).encode(color=bar_color)
@@ -291,7 +285,7 @@ def render_population_box(
             color="#1F2937",
         ).encode(text=alt.Text("VoterCount:Q", format=",.0f"))
 
-        chart = bars + text  
+        chart = bars + text
         st.altair_chart(chart, use_container_width=True)
 
 # =========================================================
@@ -868,6 +862,7 @@ def render_region_detail_layout(
             render_incumbent_card(df_cur_sel)
         with c3.container(height="stretch"):
             render_prg_party_box(df_idx_sel, df_idx_all=df_idx_all)
+
 
 
 
