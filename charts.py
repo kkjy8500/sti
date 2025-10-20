@@ -9,10 +9,9 @@ import re, math
 import pandas as pd
 import streamlit as st
 import altair as alt
-from metrics import compute_24_gap
+from metrics import compute_24_gap  # used in result card
 
-
-# Preferred brand-ish blues/greys for KPI/mini elements
+# -------- Brand-ish colors (keep minimal) --------
 COLOR_BLUE = "#3498DB"   # TUNE: main accent blue
 COLOR_GRAY = "#95A5A6"   # TUNE: neutral grey
 
@@ -49,10 +48,7 @@ def _fmt_pct(x):
     return f"{x:.2f}%" if isinstance(x, (int, float)) else "N/A"
 
 def _col(df: pd.DataFrame, bookmark_map: dict | None, std_key: str, candidates: list[str], required: bool = True) -> str | None:
-    """
-    Column resolver: bookmark first (if provided), then candidate scan.
-    - std_key: standard key in bookmark_map (e.g., 'total_voters')
-    """
+    """Bookmark-first column resolver. Fallback to candidate scan (exact/trimmed)."""
     if df is None or df.empty: return None
     if bookmark_map:
         cand = bookmark_map.get(std_key)
@@ -61,7 +57,6 @@ def _col(df: pd.DataFrame, bookmark_map: dict | None, std_key: str, candidates: 
     for c in candidates:
         if c in df.columns:
             return c
-    # try normalized compare
     cols = [str(c).strip().replace("\n","").replace("\r","") for c in df.columns]
     for c in candidates:
         if c in cols:
@@ -83,13 +78,13 @@ def _render_topbar(page_title: str | None, app_title: str | None):
             st.markdown(f"<div style='text-align:right;font-weight:700;font-size:1.05rem;'>🗳️ {app_title}</div>", unsafe_allow_html=True)
 
 # =========================================================
-# Population Box – KPI + two-bars (Region vs 10-avg)
-# Key simplifications:
-#  - Removed Scale(range/rangeStep) to avoid vega schema errors.
-#  - Control bar thickness via mark_bar(size=...) only.
-#  - Use math.isfinite instead of numpy (fewer deps).
-#  - Keep numeric fallbacks ultra-safe.
-# TUNE: adjust box_height_px, bar thickness, colors in one place below.
+# (1) Population Box – KPI + two-bars (Region vs 10-avg)
+# Why bars might not show (and fixes we apply):
+# - Missing total_voters column -> robust finder with Korean/English aliases.
+# - Non-numeric strings -> strict numeric casting; NaN-safe sums.
+# - X-domain <= 0 -> enforce small positive domain headroom.
+# - Over-tight bar size -> compute from container height (no rangeStep usage).
+# TUNE: box_height_px, bar thickness, colors below.
 # =========================================================
 def render_population_box(
     pop_sel: pd.DataFrame,
@@ -97,23 +92,22 @@ def render_population_box(
     df_pop_all: pd.DataFrame,
     bookmark_map: dict | None = None,
     box_height_px: int = 170,
-    SHOW_DEBUG: bool = False,  # set True when diagnosing
+    SHOW_DEBUG: bool = False,  # TUNE: set True to print diagnostics
 ):
     if pop_sel is None or pop_sel.empty:
         st.info("인구 데이터가 없습니다."); return
     df_s = pop_sel.copy()
     df_a = df_pop_all.copy() if df_pop_all is not None else pd.DataFrame()
 
-    # ---------- Resolve total/floating columns (bookmark first, then common aliases) ----------
-    def _norm(s: str) -> str:
-        return re.sub(r"\s+", "", str(s)).lower()
+    # --- robust finders (bookmark -> aliases -> heuristics)
+    def _norm(s: str) -> str: return re.sub(r"\s+","",str(s)).lower()
 
     def _find_total_col_in(df: pd.DataFrame, bm: dict | None):
         if bm:
             for k in ["total_voters", "총유권자", "전체유권자"]:
                 v = bm.get(k)
                 if v and v in df.columns: return v
-        aliases = ["전체 유권자 수","전체유권자수","전체 유권자","전체유권자","총유권자","유권자수","total_voters","voters","totalvoters"]
+        aliases = ["전체 유권자 수","전체유권자수","전체 유권자","전체유권자","총유권자","유권자수","선거인수","total_voters","voters"]
         norm_cols = [_norm(c) for c in df.columns]
         for a in aliases:
             if _norm(a) in norm_cols:
@@ -134,6 +128,7 @@ def render_population_box(
             na = _norm(a)
             for i, nc in enumerate(norm_cols):
                 if (na == nc) or (na in nc): return df.columns[i]
+        # fallback: use an object column with moderate cardinality
         for c in df.columns:
             s = df[c]
             if s.dtype == "O":
@@ -152,13 +147,13 @@ def render_population_box(
         if any(k in str(c) for k in ["유동", "전입", "전출", "유출입", "floating"]):
             float_col = c; break
 
-    # ---------- Numeric casting ----------
+    # --- numeric casting & safe sums
     df_s[total_col] = pd.to_numeric(df_s[total_col].apply(_to_num), errors="coerce")
     if float_col:
         df_s[float_col] = pd.to_numeric(df_s[float_col].apply(_to_num), errors="coerce")
     region_total = float(df_s[total_col].sum(skipna=True)) if df_s[total_col].notna().any() else 0.0
 
-    # ---------- Compute 10-avg (district-level mean) ----------
+    # --- compute "10개 평균" (구단위 합계 후 평균)
     avg_total = None
     if not df_a.empty:
         total_col_a  = _find_total_col_in(df_a, bookmark_map)
@@ -176,7 +171,7 @@ def render_population_box(
             else:
                 avg_total = float(a_vals.mean(skipna=True)) if a_vals.notna().any() else None
 
-    # ---------- KPI (top) ----------
+    # --- KPI row (same style as other KPI blocks)
     c1, c2 = st.columns(2)
     with c1:
         st.markdown(
@@ -188,40 +183,36 @@ def render_population_box(
             """, unsafe_allow_html=True
         )
     with c2:
-        if float_col and df_s[float_col].notna().any():
-            floating_value_txt = f"{int(round(float(df_s[float_col].sum()))):,}명"
-        else:
-            floating_value_txt = "N/A"
+        txt = f"{int(round(float(df_s[float_col].sum()))):,}명" if (float_col and df_s[float_col].notna().any()) else "N/A"
         st.markdown(
             f"""
             <div style="text-align:center;">
               <div style="color:#6B7280; font-weight:600; margin-bottom:4px;">유동인구</div>
-              <div style="font-weight:800; color:#111827;">{floating_value_txt}</div>
+              <div style="font-weight:800; color:#111827;">{txt}</div>
             </div>
             """, unsafe_allow_html=True
         )
 
-    # ---------- Bar data ----------
+    # --- Bar data (ensure numeric & positive x-domain)
     if isinstance(avg_total, (int, float)) and math.isfinite(avg_total) and (avg_total > 0):
         bar_df = pd.DataFrame({"label": ["해당 지역", "10개 평균"], "value": [region_total, avg_total]})
     else:
         bar_df = pd.DataFrame({"label": ["해당 지역"], "value": [region_total]})
+    bar_df["value"] = pd.to_numeric(bar_df["value"], errors="coerce").fillna(0.0)
     bar_df["color"] = bar_df["label"].map(lambda x: COLOR_BLUE if x=="해당 지역" else COLOR_GRAY)
 
-    # TUNE: bar thickness auto-fit (no scale.range/rangeStep to avoid schema errors)
     num_cats   = max(1, len(bar_df))
-    inner_pad  = 20                      # TUNE: top/bottom padding reserve (px)
+    inner_pad  = 20                                 # TUNE: vertical padding (px)
     inner_h    = max(40, int(box_height_px - inner_pad))
-    bar_size   = max(26, min(120, int(inner_h / num_cats)))  # TUNE: min/max thickness (px)
+    bar_size   = max(26, min(120, int(inner_h / num_cats)))  # TUNE: thickness
 
-    # TUNE: x-domain with gentle headroom (avoid 0-width bar when values are tiny)
     x_max = float(bar_df["value"].max()) if len(bar_df) else 1.0
     if (not math.isfinite(x_max)) or (x_max <= 0): x_max = 1.0
-    x_max *= 1.1
+    x_max *= 1.1  # TUNE: gentle headroom
 
     chart = (
         alt.Chart(bar_df)
-        .mark_bar(size=bar_size)  # TUNE: bar thickness only via size
+        .mark_bar(size=bar_size)
         .encode(
             y=alt.Y("label:N", title=None, axis=alt.Axis(labels=True, ticks=False)),
             x=alt.X("value:Q", title=None, axis=alt.Axis(format="~,", labelBound=True),
@@ -247,8 +238,12 @@ def render_population_box(
         })
 
 # =========================================================
-# Age Composition (Half donut)
-# TUNE: inner/outer radius, fonts, center offsets, chart width/height.
+# (2) Age Composition (Half donut) – responsive donut + responsive text panel
+# Strategy:
+# - Make the donut itself responsive: omit explicit width, set autosize=fit, use_container_width=True.
+# - Keep center text as a separate markdown "text panel" right below (fully responsive & lightweight).
+#   (Altair center-with-signal can be heavier and brittle across containers.)
+# TUNE: inner/outer radius, height, colors.
 # =========================================================
 def render_age_highlight_chart(pop_sel: pd.DataFrame, *, bookmark_map: dict | None = None, box_height_px: int = 240):
     df = _norm_cols(pop_sel.copy()) if pop_sel is not None else pd.DataFrame()
@@ -258,8 +253,7 @@ def render_age_highlight_chart(pop_sel: pd.DataFrame, *, bookmark_map: dict | No
 
     Y, M, O = "청년층(18~39세)", "중년층(40~59세)", "고령층(65세 이상)"
 
-    # total_voters detection (optional)
-    total_col = None
+    # optional: total voters (for denominator)
     try:
         total_col = _col(
             df, bookmark_map, "total_voters",
@@ -275,14 +269,10 @@ def render_age_highlight_chart(pop_sel: pd.DataFrame, *, bookmark_map: dict | No
             return
 
     def _to_num_strict(v) -> float:
-        s = str(v)
-        s = re.sub(r"[^\d\.\-]", "", s)
-        if s in ("", ".", "-", "-.", ".-"):
-            return 0.0
-        try:
-            return float(s)
-        except Exception:
-            return 0.0
+        s = re.sub(r"[^\d\.\-]", "", str(v))
+        if s in ("", ".", "-", "-.", ".-"): return 0.0
+        try: return float(s)
+        except: return 0.0
 
     cols_to_cast = [Y, M, O] + ([total_col] if total_col else [])
     for c in cols_to_cast:
@@ -306,9 +296,8 @@ def render_age_highlight_chart(pop_sel: pd.DataFrame, *, bookmark_map: dict | No
     focus = st.radio("강조", [Y, M, O], index=0, horizontal=True, label_visibility="collapsed")
     st.markdown("<div style='height: 6px;'></div>", unsafe_allow_html=True)
 
-    inner_r, outer_r = 68, 106         # TUNE: donut radii
-    W = 320                              # TUNE: chart width (px)
-    H = max(220, int(box_height_px))     # TUNE: chart height (px)
+    inner_r, outer_r = 68, 106   # TUNE: donut thickness
+    H = max(220, int(box_height_px))  # TUNE: chart height
 
     df_vis = pd.DataFrame({
         "연령": labels_order, "명": values, "비율": ratios01, "표시비율": ratios100,
@@ -316,7 +305,7 @@ def render_age_highlight_chart(pop_sel: pd.DataFrame, *, bookmark_map: dict | No
     })
 
     base = (
-        alt.Chart(df_vis, width=W, height=H)
+        alt.Chart(df_vis, height=H)
         .mark_arc(innerRadius=inner_r, outerRadius=outer_r, cornerRadius=6, stroke="white", strokeWidth=1)
         .encode(
             theta=alt.Theta("비율:Q", stack=True, sort=None, scale=alt.Scale(range=[-math.pi/2, math.pi/2])),
@@ -328,29 +317,25 @@ def render_age_highlight_chart(pop_sel: pd.DataFrame, *, bookmark_map: dict | No
                 alt.Tooltip("표시비율:Q", title="비율(%)", format=".2f"),
             ],
         )
+        .properties(autosize=alt.AutoSizeParams(type="fit", contains="padding", resize=True))
+        .configure_view(stroke=None)
     )
 
-    label_map = {Y: "청년층(18~39세)", M: "중년층(40~59세)", O: "고령층(65세 이상)"}
+    st.altair_chart(base, use_container_width=True, theme=None)  # responsive donut
+
+    # --- Responsive text panel (centered, below chart)
     idx = labels_order.index(focus)
     pct_txt = f"{(ratios100[idx]):.2f}%"
-
-    NUM_FONT, LBL_FONT = 28, 14         # TUNE: center text font sizes
-    center_y = H / 2
-
-    num_text = (
-        alt.Chart(pd.DataFrame({"t":[pct_txt]}), width=W, height=H)
-        .mark_text(fontWeight="bold", fontSize=NUM_FONT, color="#0f172a")
-        .encode(text="t:N", x=alt.value(W/2), y=alt.value(center_y + 2))
-    )
-    lbl_text = (
-        alt.Chart(pd.DataFrame({"t":[label_map.get(focus, focus)]}), width=W, height=H)
-        .mark_text(fontSize=LBL_FONT, color="#475569", baseline="top")
-        .encode(text="t:N", x=alt.value(W/2), y=alt.value(center_y + 28))
-    )
-
-    st.altair_chart(
-        (base + num_text + lbl_text).properties(autosize=alt.AutoSizeParams(type="pad")).configure_view(stroke=None),
-        use_container_width=True, theme=None
+    focus_lbl = {"청년층(18~39세)":"청년층(18~39세)", "중년층(40~59세)":"중년층(40~59세)", "고령층(65세 이상)":"고령층(65세 이상)"}\
+                .get(focus, focus)
+    st.markdown(
+        f"""
+        <div style="text-align:center; margin-top:4px;">
+          <div style="font-size:28px; font-weight:800; color:#0f172a; line-height:1;">{pct_txt}</div>
+          <div style="font-size:14px; color:#475569;">{focus_lbl}</div>
+        </div>
+        """,
+        unsafe_allow_html=True
     )
 
 # =========================================================
@@ -395,10 +380,10 @@ def render_sex_ratio_bar(pop_sel: pd.DataFrame, *, bookmark_map: dict | None = N
         .mark_bar(size=bar_size)
         .encode(
             y=alt.Y("연령대표시:N", sort=[label_map[a] for a in age_buckets], title=None),
-            x=alt.X("전체비중:Q", scale=alt.Scale(domain=[0, 0.30]), axis=alt.Axis(format=".0%", title="전체 기준 구성비(%)", grid=True)),
-            color=alt.Color("성별:N", 
-                            scale=alt.Scale(domain=["남성","여성"], 
-                                            range=["#4DA6B7", "#85C1E9"]),  # TUNE: male/female colors
+            x=alt.X("전체비중:Q", scale=alt.Scale(domain=[0, 0.30]),
+                    axis=alt.Axis(format=".0%", title="전체 기준 구성비(%)", grid=True)),
+            color=alt.Color("성별:N",
+                            scale=alt.Scale(domain=["남성","여성"], range=["#4DA6B7", "#85C1E9"]),  # TUNE colors
                             legend=alt.Legend(title=None, orient="top")),
             tooltip=[
                 alt.Tooltip("연령대표시:N", title="연령대"),
@@ -414,7 +399,7 @@ def render_sex_ratio_bar(pop_sel: pd.DataFrame, *, bookmark_map: dict | None = N
     st.altair_chart(bars, use_container_width=True, theme=None)
 
 # =========================================================
-# Vote trend (keep interactions)
+# (3) Vote trend – remove default tooltips (e.g., sort_index), keep only ours
 # TUNE: ORDER_LABELS, legend orientation, line width, point size.
 # =========================================================
 def render_vote_trend_chart(ts_sel: pd.DataFrame, ts_all: pd.DataFrame | None = None, *, box_height_px: int = 420):
@@ -440,8 +425,12 @@ def render_vote_trend_chart(ts_sel: pd.DataFrame, ts_all: pd.DataFrame | None = 
             elif year_col: base_e = long_df[year_col].astype(str)
             else: st.warning("선거명을 식별할 컬럼이 필요합니다."); return
 
-        long_df["득표율"] = pd.to_numeric(long_df["득표율"].astype(str).str.replace("%","", regex=False).str.strip(), errors="coerce")
+        long_df["득표율"] = pd.to_numeric(
+            long_df["득표율"].astype(str).str.replace("%","", regex=False).str.strip(),
+            errors="coerce"
+        )
 
+        # --- label normalization for known codes
         def _norm_token(s: str) -> str:
             s = str(s).strip().replace("-","_").replace(" ","_").upper()
             return re.sub(r"_+","_", s)
@@ -465,7 +454,7 @@ def render_vote_trend_chart(ts_sel: pd.DataFrame, ts_all: pd.DataFrame | None = 
             "2020 총선 비례",
             "2022 대선","2022 광역단체장","2022 광역 비례",
             "2024 총선 비례",
-            "2025 대선",  # keep
+            "2025 대선",
         ]
 
         long_df = long_df[long_df["선거명_표시"].isin(ORDER_LABELS)].copy()
@@ -483,13 +472,16 @@ def render_vote_trend_chart(ts_sel: pd.DataFrame, ts_all: pd.DataFrame | None = 
         )
 
         base = alt.Chart(long_df)
+
+        # --- turn OFF default tooltips here (so no sort_index etc.)
         lines = base.mark_line(point=False, strokeWidth=2).encode(
             x=x_shared,
             y=alt.Y("득표율:Q", axis=alt.Axis(title="득표율(%)")),
             color=alt.Color("계열:N",
                             scale=alt.Scale(domain=party_order, range=colors),
                             legend=alt.Legend(title=None, orient="top", direction="horizontal", columns=4)),
-            detail="계열:N"
+            detail="계열:N",
+            tooltip=None   # <-- disable defaults
         )
 
         sel = alt.selection_point(fields=["선거명_표시","계열"], nearest=True, on="pointerover", empty=False)
@@ -497,17 +489,21 @@ def render_vote_trend_chart(ts_sel: pd.DataFrame, ts_all: pd.DataFrame | None = 
         hit = base.mark_circle(size=650, opacity=0).encode(
             x=x_shared, y="득표율:Q",
             color=alt.Color("계열:N", scale=alt.Scale(domain=party_order, range=colors), legend=None),
-            detail="계열:N"
+            detail="계열:N",
+            tooltip=None   # <-- disable defaults
         ).add_params(sel)
 
+        # --- only this layer provides a tooltip (our fields only)
         pts = base.mark_circle(size=120).encode(
             x=x_shared, y="득표율:Q",
             color=alt.Color("계열:N", scale=alt.Scale(domain=party_order, range=colors), legend=None),
             opacity=alt.condition(sel, alt.value(1), alt.value(0)),
             detail="계열:N",
-            tooltip=[alt.Tooltip("선거명_표시:N", title="선거명"),
-                     alt.Tooltip("계열:N", title="계열"),
-                     alt.Tooltip("득표율:Q", title="득표율(%)", format=".2f")]
+            tooltip=[
+                alt.Tooltip("선거명_표시:N", title="선거명"),
+                alt.Tooltip("계열:N", title="계열"),
+                alt.Tooltip("득표율:Q", title="득표율(%)", format=".2f"),
+            ],
         ).transform_filter(sel)
 
         zoomX = alt.selection_interval(bind='scales', encodings=['x'])
@@ -515,8 +511,7 @@ def render_vote_trend_chart(ts_sel: pd.DataFrame, ts_all: pd.DataFrame | None = 
         st.altair_chart(chart, use_container_width=True, theme=None)
 
 # =========================================================
-# 2024 Results (card)
-# TUNE: html_component height, chip colors in _party_chip_color.
+# 2024 Results (simple card) – unchanged
 # =========================================================
 def _party_chip_color(name: str) -> tuple[str, str]:
     s = (name or "").strip()
@@ -526,8 +521,7 @@ def _party_chip_color(name: str) -> tuple[str, str]:
         ("개혁신당", ("#798897", "rgba(121,136,151,.12)")),
     ]
     for key, col in mapping:
-        if key in s:
-            return col
+        if key in s: return col
     return ("#334155", "rgba(51,65,85,.08)")
 
 def render_results_2024_card(res_sel: pd.DataFrame | None, *, df_24_all: pd.DataFrame | None = None, code: str | None = None):
@@ -627,8 +621,7 @@ def render_results_2024_card(res_sel: pd.DataFrame | None, *, df_24_all: pd.Data
         html_component(html, height=250, scrolling=False)
 
 # =========================================================
-# Incumbent card
-# TUNE: chip colors via _party_chip_color; list bullets via CSS.
+# Incumbent card – unchanged
 # =========================================================
 def render_incumbent_card(cur_sel: pd.DataFrame | None):
     with st.container(border=True, height="stretch"):
@@ -688,8 +681,7 @@ def render_incumbent_card(cur_sel: pd.DataFrame | None):
         html_component(html, height=250, scrolling=False)
 
 # =========================================================
-# Progressive party box (KPI + mini two-bar)
-# TUNE: KPI font sizes, mini-bar height, tick step, colors.
+# Progressive party box (KPI + mini two-bar) – unchanged logic
 # =========================================================
 def render_prg_party_box(prg_sel: pd.DataFrame | None, *, df_idx_all: pd.DataFrame | None = None):
     with st.container(border=True, height="stretch"):
@@ -754,8 +746,8 @@ def render_prg_party_box(prg_sel: pd.DataFrame | None, *, df_idx_all: pd.DataFra
                     .encode(
                         x=alt.X(
                             "값:Q",
-                            axis=alt.Axis(title=None, format=".0%", values=[v/100 for v in range(0, 101, 2)]),
-                            scale=alt.Scale(domain=[0, 0.1], nice=False)
+                            axis=alt.Axis(title=None, format=".0%"),
+                            scale=alt.Scale(domain=[0, 0.10], nice=False)  # TUNE: max 10%
                         ),
                         y=alt.Y("항목:N", title=None, sort=["해당 지역", "10개 평균"]),
                         color=alt.Color("색상:N", scale=None, legend=None),
@@ -769,8 +761,7 @@ def render_prg_party_box(prg_sel: pd.DataFrame | None, *, df_idx_all: pd.DataFra
             pass
 
 # =========================================================
-# Region detail layout
-# (Do not change structure; only calls simplified functions above.)
+# Page layout (keep calls only)
 # =========================================================
 def render_region_detail_layout(
     *,
