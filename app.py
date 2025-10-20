@@ -14,14 +14,14 @@ import streamlit.components.v1 as components  # [HTML render] use for raw HTML b
 
 # Data Loader Imports (Korean function names are maintained as per the original structure)
 from data_loader import (
-    load_bookmark,              # bookmark.csv (optional but preferred)
-    load_bookmark_map,          # -> dict, standard_key -> actual column
-    load_population_agg,        # population.csv
-    load_party_labels,          # party_labels.csv
-    load_vote_trend,            # vote_trend.csv
-    load_results_2024,          # 5_na_dis_results.csv
-    load_current_info,          # current_info.csv
-    load_index_sample,          # index_sample.csv
+    load_bookmark,             # bookmark.csv (optional but preferred)
+    load_bookmark_map,         # -> dict, standard_key -> actual column
+    load_population_agg,       # population.csv
+    load_party_labels,         # party_labels.csv
+    load_vote_trend,           # vote_trend.csv
+    load_results_2024,         # 5_na_dis_results.csv
+    load_current_info,         # current_info.csv
+    load_index_sample,         # index_sample.csv
 )
 
 # Chart Renderer Imports (Korean function names are maintained as per the original structure)
@@ -35,10 +35,10 @@ from charts import (
 )
 
 # ====================================================================
-# CONFIGURATION CONSTANTS (MUST BE DEFINED EARLY)
+# CONFIGURATION CONSTANTS
 # ====================================================================
 APP_TITLE = "지역구 선정 1단계 조사 결과"
-DATA_DIR = Path("data")  # [File root] change here if your relative data folder moves.
+DATA_DIR = Path("data")  # [File Path] Root directory for data files.
 
 # Absolute Scaling
 ABSOLUTE_MAX_SCORES = {
@@ -48,19 +48,18 @@ ABSOLUTE_MAX_SCORES = {
 }
 
 # ===== Style Configurations (English Comments for Maintainability) =====
-REGION_COL_WIDTH = "150px"  # [Spacing] Fixed width for region name column.
+REGION_COL_WIDTH = "150px"  # [Layout] Fixed width for region name column in tables.
 
 # ---------- [Typography Scale for Summary page only] ----------
 # - Keep subheaders ("결과 요약", "세부 지표별 상세 분석", "지표 설명") unchanged.
-# - Bump general table/body text sizes for readability.
-UI_FONT_TABLE_BASE = 15          # [Typography] base font-size for tables
-UI_FONT_REGION_LABEL = 15        # [Typography] region name text
-UI_FONT_BAR_TEXT = 14            # [Typography] number text over bars
-UI_FONT_DETAIL_CELL = 15         # [Typography] numeric text in detail table
-UI_FONT_HEAD_CELL = 15           # [Typography] header cells in tables
-UI_FONT_DESC_TITLE = 16          # [Typography] bullet item title
-UI_FONT_DESC_BODY = 15           # [Typography] bullet item body
-UI_FONT_DESC_META = 14           # [Typography] bullet item meta
+UI_FONT_TABLE_BASE = 15     # [Font Size] Base font-size for tables.
+UI_FONT_REGION_LABEL = 15  # [Font Size] Region name text size.
+UI_FONT_BAR_TEXT = 14      # [Font Size] Number text over score bars.
+UI_FONT_DETAIL_CELL = 15   # [Font Size] Numeric text in the detailed table.
+UI_FONT_HEAD_CELL = 15     # [Font Size] Header cells in tables.
+UI_FONT_DESC_TITLE = 16    # [Font Size] Indicator description bullet title.
+UI_FONT_DESC_BODY = 15     # [Font Size] Indicator description body text.
+UI_FONT_DESC_META = 14     # [Font Size] Indicator description metadata (corr/weight).
 
 # Fixed highlight rows in Summary table
 FIXED_HIGHLIGHT_REGIONS = ["서울 서대문구갑", "경기 평택시을", "경기 화성시을"]
@@ -208,6 +207,7 @@ def _bar_cell_factory(score_df: pd.DataFrame, score_cols: list[str], bar_colors:
     top3_values = {}
     for col in score_cols:
         try:
+            # [Logic] Find Top 3 values for dynamic highlighting
             top3_values[col] = set(score_df.nlargest(3, col, keep='all')[col].tolist())
         except KeyError:
             top3_values[col] = set()
@@ -217,15 +217,16 @@ def _bar_cell_factory(score_df: pd.DataFrame, score_cols: list[str], bar_colors:
         try:
             v = float(val)
         except Exception:
-            # [Typography] fall back text uses bumped size
+            # [Typography] Fall back text uses bumped size
             return f"<span style='font-size:{UI_FONT_TABLE_BASE}px;font-weight:600;'>{val}</span>"
         if np.isnan(v): return ""
+        # [Scaling] Determine max score for bar width (Absolute > Dynamic > 1.0)
         max_score = ABSOLUTE_MAX_SCORES.get(col, dynamic_maxes.get(col, 1.0))
         max_score = max(1.0, max_score)
         pct = max(0.0, min(100.0, (v / max_score) * 100.0))
         is_top3 = col in top3_values and v in top3_values[col]
         color = bar_colors.get(col, "#6B7280")
-        container_bg = DYNAMIC_HIGHLIGHT_CELL_BG if is_top3 else "#F3F4F6"  # [Color] change highlight bg later
+        container_bg = DYNAMIC_HIGHLIGHT_CELL_BG if is_top3 else "#F3F4F6"  # [Color] Top 3 highlight background
 
         formatted_value = _format_value(v, col)
         return (
@@ -242,6 +243,7 @@ def _bar_cell_factory(score_df: pd.DataFrame, score_cols: list[str], bar_colors:
 def _text_only_cell(val: float | object, col_name: str) -> str:
     """Plain numeric cell for detailed table (no bars)."""
     formatted_value = _format_value(val, col_name)
+    # [Typography] Apply font size/weight for detailed table cell
     return (
         f'<div style="text-align:center; padding: 6px 8px; font-size:{UI_FONT_DETAIL_CELL}px; font-weight:700; color:#1F2937;">{formatted_value}</div>'
     )
@@ -252,12 +254,10 @@ def _read_index_desc_csv() -> pd.DataFrame:
     """
     Minimal loader for indicator descriptions.
     - Primary path: data/index.csv
-    - Fallback path: /mnt/data/index.csv  (uploaded file location)
-    - Encodings: utf-8-sig -> utf-8 -> cp949
-    - If only 1 column is detected, try TSV fallback once.
+    - Fallback path: /mnt/data/index.csv
     """
-    candidates = [DATA_DIR / "index.csv", Path("/mnt/data/index.csv")]  # [Paths] minimal explicit candidates
-    encodings = ("utf-8-sig", "utf-8", "cp949")  # [Encoding] extend if you later standardize differently
+    candidates = [DATA_DIR / "index.csv", Path("/mnt/data/index.csv")]  # [File Path] minimal explicit candidates
+    encodings = ("utf-8-sig", "utf-8", "cp949")  # [Encoding] Standard Korean CSV encodings
     for p in candidates:
         if not p.exists(): continue
         for enc in encodings:
@@ -314,7 +314,7 @@ if menu == "종합":
     st.write(""); st.divider()
 
     # --- Load Scoring Data ---
-    csv_path = Path("data/scoring.csv")
+    csv_path = Path("data/scoring.csv") # [File Path] Hardcoded path for main scoring data
     if not csv_path.exists():
         st.error("`data/scoring.csv`를 찾을 수 없습니다. (경로 고정)")
         st.stop()
@@ -335,10 +335,11 @@ if menu == "종합":
 
     _bar_cell = _bar_cell_factory(df, score_cols, BAR_COLORS_MAIN)
 
-    st.subheader("결과 요약")  # [Keep as-is] section header size unchanged
+    st.subheader("결과 요약")  # [Header] section header size unchanged
 
     # --- Build HTML table for main scoring ('결과 요약') ---
     headers = [label_col] + score_cols
+    # [Styling] Fixed width for region column
     thead = (
         f"<th style='text-align:left;padding:6px 8px;white-space:nowrap;width:{REGION_COL_WIDTH};"
         f"font-size:{UI_FONT_HEAD_CELL}px;font-weight:800;'>지역</th>"
@@ -347,6 +348,7 @@ if menu == "종합":
     col_width_pct = f"{100 / remaining_cols_count}%" if remaining_cols_count > 0 else "auto"
     thead += "".join(
         [
+            # [Styling] Width percentage for score columns
             f"<th style='text-align:center;padding:6px 8px;white-space:nowrap;width:{col_width_pct};"
             f"font-size:{UI_FONT_HEAD_CELL}px;font-weight:800;'>{h}</th>"
             for h in score_cols
@@ -356,7 +358,7 @@ if menu == "종합":
     rows_html = []
     for _, row in df.iterrows():
         is_fixed_highlight = row[label_col] in FIXED_HIGHLIGHT_REGIONS
-        row_style = f"background-color:{FIXED_HIGHLIGHT_ROW_BG};" if is_fixed_highlight else ""
+        row_style = f"background-color:{FIXED_HIGHLIGHT_ROW_BG};" if is_fixed_highlight else "" # [Color] Fixed row highlight
         cells = [
             f"<td style='padding:6px 8px;white-space:nowrap;width:{REGION_COL_WIDTH};'>"
             f"<span style='font-size:{UI_FONT_REGION_LABEL}px; font-weight:{'800' if is_fixed_highlight else '700'};'>{row[label_col]}</span>"
@@ -368,7 +370,7 @@ if menu == "종합":
 
     table_html = (
         "<div style='overflow-x:auto;'>"
-        f"<table style='border-collapse:separate;border-spacing:0;width:100%;font-size:{UI_FONT_TABLE_BASE}px;'>"
+        f"<table style='border-collapse:separate;border-spacing:0;width:100%;font-size:{UI_FONT_TABLE_BASE}px;'>" # [Typography] Table base font size
         f"<thead><tr>{thead}</tr></thead>"
         f"<tbody>{''.join(rows_html)}</tbody>"
         "</table>"
@@ -380,7 +382,7 @@ if menu == "종합":
     # 세부 지표별 상세 분석 (Detailed Index Analysis) - Text Only
     # ====================================================================
     st.divider()
-    st.subheader("세부 지표별 상세 분석")  # [Keep as-is] section header size unchanged
+    st.subheader("세부 지표별 상세 분석")  # [Header] section header size unchanged
 
     INDICATOR_GROUPS = {
         "유권자환경": ["유권자 수", "유동인구", "고령층 비율", "청년층 비율", "4-50대 비율", "2030여성 비율"],
@@ -409,7 +411,7 @@ if menu == "종합":
                 )
 
                 label_col_new = "지역"
-                present_cols = [c for c in target_cols if c in df_display.columns]
+                present_cols = [c for c in target_cols if c in df_display.columns] # [Logic] Filter columns actually present
 
                 if not present_cols:
                     st.info(f"선택된 그룹 ({selected_group})에 해당하는 컬럼이 데이터에 없습니다.")
@@ -419,6 +421,7 @@ if menu == "종합":
                     df_final = df_final.dropna(subset=[label_col_new]).dropna(subset=present_cols, how='all').reset_index(drop=True)
 
                     # --- Detailed table (text only)
+                    # [Styling] Fixed width for region column
                     thead_new = (
                         f"<th style='text-align:left;padding:6px 8px;white-space:nowrap;font-weight:800;"
                         f"font-size:{UI_FONT_HEAD_CELL}px;width:{REGION_COL_WIDTH};'>지역</th>"
@@ -427,6 +430,7 @@ if menu == "종합":
                     col_width_pct_new = f"{100 / remaining_cols_count_new}%" if remaining_cols_count_new > 0 else "auto"
                     thead_new += "".join(
                         [
+                            # [Styling] Width percentage for indicator columns
                             f"<th style='text-align:center;padding:6px 8px;white-space:nowrap;width:{col_width_pct_new};"
                             f"font-size:{UI_FONT_HEAD_CELL}px;font-weight:800;'>{h}</th>"
                             for h in present_cols
@@ -455,10 +459,10 @@ if menu == "종합":
                     st.markdown(table_html_new, unsafe_allow_html=True)
 
                     # ============================
-                    # Descriptions under the table → BULLETS (not a table)
+                    # Descriptions under the table → BULLETS
                     # ============================
-                    st.divider()  # [Spacing] separator between data table & descriptions
-                    st.subheader(f"지표 설명 · {selected_group}")  # [Keep as-is] subheader itself unchanged
+                    st.divider()  # [Spacing] Separator between data table & descriptions
+                    st.subheader(f"지표 설명 · {selected_group}")  # [Header] Subheader itself unchanged
 
                     desc_df = _read_index_desc_csv()
                     if desc_df.empty:
@@ -477,25 +481,28 @@ if menu == "종합":
                             df_desc[name_col] = df_desc[name_col].astype(str).str.strip()
 
                             # Match desc rows to the indicators shown in this tab
-                                present_set = set(present_cols)
-                                matched = df_desc[df_desc[name_col].isin(present_set)].copy()
-                                if matched.empty:
-                                    st.info("현재 탭의 컬럼명과 `index.csv`의 지표명이 일치하지 않습니다. 표기 통일이 필요합니다.")
-                                    st.caption(f"탭 컬럼: {', '.join(present_cols)}")
-                                else:
-                                    # [MODIFIED] 지표 설명 순서를 present_cols 리스트 순서에 맞춤
-                                    sort_order = {name: i for i, name in enumerate(present_cols)}
-                                    matched['sort_key'] = matched[name_col].apply(lambda x: sort_order.get(x, len(present_cols)))
-                                                
-                                    sorted_matched = matched.sort_values(by='sort_key').drop(columns=['sort_key'])
-                                    
-                                    # Build bullet list HTML (bigger fonts, no scroll)
-                                    items = []
-                                    for _, r in sorted_matched.iterrows():
-                                        nm  = str(r.get(name_col, "")).strip()
-                                        ds  = str(r.get(desc_col, "" if desc_col else "")).strip()
-                                        cr  = str(r.get(corr_col, "" if corr_col else "")).strip()
-                                        wg  = str(r.get(wgt_col, "" if wgt_col else "")).strip()
+                            present_set = set(present_cols)
+                            matched = df_desc[df_desc[name_col].isin(present_set)].copy()
+                            if matched.empty:
+                                st.info("현재 탭의 컬럼명과 `index.csv`의 지표명이 일치하지 않습니다. 표기 통일이 필요합니다.")
+                                st.caption(f"탭 컬럼: {', '.join(present_cols)}")
+                            else:
+                                # [MODIFIED] Sort description based on the order of 'present_cols' (the order shown in the table)
+                                # Step 1: Create a sort key dictionary based on the desired order
+                                sort_order = {name: i for i, name in enumerate(present_cols)}
+                                matched['sort_key'] = matched[name_col].apply(lambda x: sort_order.get(x, len(present_cols)))
+                                
+                                # Step 2: Sort the matched descriptions
+                                sorted_matched = matched.sort_values(by='sort_key').drop(columns=['sort_key'])
+                                
+                                # Build bullet list HTML (bigger fonts, no scroll)
+                                items = []
+                                for _, r in sorted_matched.iterrows():
+                                    nm  = str(r.get(name_col, "")).strip()
+                                    ds  = str(r.get(desc_col, "" if desc_col else "")).strip()
+                                    cr  = str(r.get(corr_col, "" if corr_col else "")).strip()
+                                    wg  = str(r.get(wgt_col, "" if wgt_col else "")).strip()
+
                                     meta_parts = []
                                     if cr: meta_parts.append(f"상관관계: {cr}")
                                     if wg: meta_parts.append(f"가중치: {wg}")
@@ -503,24 +510,23 @@ if menu == "종합":
 
                                     items.append(f"""
                                         <li style="margin:0 0 14px 0;">
-                                          <div>
-                                            <!-- [Typography] indicator name -->
-                                            <div style="font-weight:800; font-size:{UI_FONT_DESC_TITLE}px; line-height:1.25; color:#111827;">{nm}</div>
-                                            {'<div style="margin-top:6px; font-size:' + str(UI_FONT_DESC_BODY) + 'px; line-height:1.6; color:#111827;">' + ds + '</div>' if ds else ''}
-                                            {'<div style="margin-top:6px; font-size:' + str(UI_FONT_DESC_META) + 'px; line-height:1.45; color:#374151;">' + meta + '</div>' if meta else ''}
-                                          </div>
+                                            <div>
+                                                <div style="font-weight:800; font-size:{UI_FONT_DESC_TITLE}px; line-height:1.25; color:#111827;">{nm}</div>
+                                                {f'<div style="margin-top:6px; font-size:{UI_FONT_DESC_BODY}px; line-height:1.6; color:#111827;">{ds}</div>' if ds else ''}
+                                                {f'<div style="margin-top:6px; font-size:{UI_FONT_DESC_META}px; line-height:1.45; color:#374151;">{meta}</div>' if meta else ''}
+                                            </div>
                                         </li>
                                     """)
 
                                 html_bullets = f"""
                                 <div style="padding:6px 2px 10px 2px;">
-                                  <ul style="margin:0; padding-left:18px; list-style-type:disc;">
-                                    {''.join(items)}
-                                  </ul>
+                                    <ul style="margin:0; padding-left:18px; list-style-type:disc;">
+                                        {''.join(items)}
+                                    </ul>
                                 </div>
                                 """
-                                # [Height] heuristic: slightly taller per item to avoid scroll with larger fonts
-                                computed_height = 140 + 70 * len(items)  # [How to change later] increase constants if still clipping
+                                # [Layout] Heuristic height calculation to avoid scrollbar with larger fonts
+                                computed_height = 140 + 70 * len(items)
                                 components.html(html_bullets, height=computed_height, scrolling=False)
 
             else:
@@ -589,6 +595,7 @@ elif menu == "데이터 설명":
     st.divider()
 
     md_text = None
+    # [File Path] Candidates for markdown file location
     for p in [Path("sti") / "지표별 구성 및 해설.md", Path("지표별 구성 및 해설.md"), Path("/mnt/data/sti/지표별 구성 및 해설.md")]:
         s = _read_markdown_cached(str(p))
         if s:
