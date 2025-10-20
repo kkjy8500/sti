@@ -477,20 +477,25 @@ if menu == "종합":
                             df_desc[name_col] = df_desc[name_col].astype(str).str.strip()
 
                             # Match desc rows to the indicators shown in this tab
-                            present_set = set(present_cols)
-                            matched = df_desc[df_desc[name_col].isin(present_set)].copy()
-                            if matched.empty:
-                                st.info("현재 탭의 컬럼명과 `index.csv`의 지표명이 일치하지 않습니다. 표기 통일이 필요합니다.")
-                                st.caption(f"탭 컬럼: {', '.join(present_cols)}")
-                            else:
-                                # Build bullet list HTML (bigger fonts, no scroll)
-                                items = []
-                                for _, r in matched.sort_values(by=[name_col]).iterrows():
-                                    nm  = str(r.get(name_col, "")).strip()
-                                    ds  = str(r.get(desc_col, "" if desc_col else "")).strip()
-                                    cr  = str(r.get(corr_col, "" if corr_col else "")).strip()
-                                    wg  = str(r.get(wgt_col, "" if wgt_col else "")).strip()
-
+                                present_set = set(present_cols)
+                                matched = df_desc[df_desc[name_col].isin(present_set)].copy()
+                                if matched.empty:
+                                    st.info("현재 탭의 컬럼명과 `index.csv`의 지표명이 일치하지 않습니다. 표기 통일이 필요합니다.")
+                                    st.caption(f"탭 컬럼: {', '.join(present_cols)}")
+                                else:
+                                    # [MODIFIED] 지표 설명 순서를 present_cols 리스트 순서에 맞춤
+                                    sort_order = {name: i for i, name in enumerate(present_cols)}
+                                    matched['sort_key'] = matched[name_col].apply(lambda x: sort_order.get(x, len(present_cols)))
+                                                
+                                    sorted_matched = matched.sort_values(by='sort_key').drop(columns=['sort_key'])
+                                    
+                                    # Build bullet list HTML (bigger fonts, no scroll)
+                                    items = []
+                                    for _, r in sorted_matched.iterrows():
+                                        nm  = str(r.get(name_col, "")).strip()
+                                        ds  = str(r.get(desc_col, "" if desc_col else "")).strip()
+                                        cr  = str(r.get(corr_col, "" if corr_col else "")).strip()
+                                        wg  = str(r.get(wgt_col, "" if wgt_col else "")).strip()
                                     meta_parts = []
                                     if cr: meta_parts.append(f"상관관계: {cr}")
                                     if wg: meta_parts.append(f"가중치: {wg}")
