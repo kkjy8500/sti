@@ -233,8 +233,10 @@ def render_population_box(
         st.write({"region_total": region_total, "avg_total": avg_total, "x_max": x_max, "bar_size": bar_size})
 
 # =========================================================
-# (2) Age Composition (Half donut) – internal text (x responsive, y fixed)
-# TUNE: inner/outer radius, height, colors.
+# (2) Age Composition (Half donut) – internal text (polar center; fully responsive)
+# - Place text using polar coords: theta=0, radius=0 (chart center)
+# - Vertical spacing via dy; no expr/signals; layers share same top-level props
+# TUNE: inner/outer radius, height, colors, dy offsets.
 # =========================================================
 def render_age_highlight_chart(pop_sel: pd.DataFrame, *, bookmark_map: dict | None = None, box_height_px: int = 240):
     df = _norm_cols(pop_sel.copy()) if pop_sel is not None else pd.DataFrame()
@@ -283,8 +285,8 @@ def render_age_highlight_chart(pop_sel: pd.DataFrame, *, bookmark_map: dict | No
     focus = st.radio("강조", [Y, M, O], index=0, horizontal=True, label_visibility="collapsed")
     st.markdown("<div style='height: 6px;'></div>", unsafe_allow_html=True)
 
-    inner_r, outer_r = 68, 106   # TUNE
-    H = max(220, int(box_height_px))  # TUNE
+    inner_r, outer_r = 68, 106   # TUNE: donut thickness
+    H = max(220, int(box_height_px))  # TUNE: chart height
 
     df_vis = pd.DataFrame({
         "연령": labels_order, "명": values, "비율": ratios01, "표시비율": ratios100,
@@ -302,30 +304,30 @@ def render_age_highlight_chart(pop_sel: pd.DataFrame, *, bookmark_map: dict | No
                      alt.Tooltip("명:Q", title="인원", format=",.0f"),
                      alt.Tooltip("표시비율:Q", title="비율(%)", format=".2f")],
         )
-        .properties(autosize=alt.AutoSizeParams(type="fit", contains="padding", resize=True))
         .configure_view(stroke=None)
     )
 
-    # center texts layer (x responsive via expr, y fixed)
+    # center texts layer (polar center -> fully responsive)
     idx = labels_order.index(focus)
     pct_txt = f"{(ratios100[idx]):.2f}%"
     focus_lbl = {Y:Y, M:M, O:O}.get(focus, focus)
-    NUM_FONT, LBL_FONT = 28, 14   # TUNE
-    y_num = H/2 + 2               # TUNE
-    y_lbl = H/2 + 28              # TUNE
+
+    NUM_FONT, LBL_FONT = 28, 14   # TUNE: font sizes
+    DY_NUM, DY_LBL = 2, 28        # TUNE: vertical offsets from center
 
     num_text = (
         alt.Chart(pd.DataFrame({"t":[pct_txt]}), height=H)
-        .mark_text(fontWeight="bold", fontSize=NUM_FONT, color="#0f172a")
-        .encode(x={"expr":"width/2"}, y=alt.value(y_num), text="t:N")
+        .mark_text(fontWeight="bold", fontSize=NUM_FONT, color="#0f172a", dy=DY_NUM)  # TUNE: number style
+        .encode(text="t:N", theta=alt.value(0), radius=alt.value(0))
     )
     lbl_text = (
         alt.Chart(pd.DataFrame({"t":[focus_lbl]}), height=H)
-        .mark_text(fontSize=LBL_FONT, color="#475569", baseline="top")
-        .encode(x={"expr":"width/2"}, y=alt.value(y_lbl), text="t:N")
+        .mark_text(fontSize=LBL_FONT, color="#475569", baseline="top", dy=DY_LBL)  # TUNE: label style
+        .encode(text="t:N", theta=alt.value(0), radius=alt.value(0))
     )
 
-    st.altair_chart((base + num_text + lbl_text), use_container_width=True, theme=None)
+    st.altair_chart((base + num_text + lbl_text).properties(autosize=alt.AutoSizeParams(type="fit", contains="padding", resize=True)),
+                    use_container_width=True, theme=None)
 
 # =========================================================
 # Sex ratio by age – horizontal bars
@@ -598,7 +600,7 @@ def render_results_2024_card(res_sel: pd.DataFrame | None, *, df_24_all: pd.Data
         html_component(html, height=250, scrolling=False)
 
 # =========================================================
-# Incumbent card (kept as a public symbol; listed in __all__)
+# Incumbent card (public symbol; listed in __all__)
 # TUNE: chip colors via _party_chip_color; list spacing via CSS.
 # =========================================================
 def render_incumbent_card(cur_sel: pd.DataFrame | None):
