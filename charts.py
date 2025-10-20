@@ -489,37 +489,32 @@ def render_vote_trend_chart(ts_sel: pd.DataFrame, ts_all: pd.DataFrame | None = 
             axis=alt.Axis(labelAngle=-32, labelOverlap=False, labelPadding=20, labelLimit=280, title="선거명")
         )
 
-        base = alt.Chart(long_df)  # NOTE: don't touch tooltip here
-
-        # Lines: disable default tooltip at mark-level, keep explicit order to avoid internal sort field leakage
-        lines = base.mark_line(point=False, strokeWidth=2, tooltip=False).encode(  # TUNE: line width
+        base = alt.Chart(long_df)
+        lines = base.mark_line(point=False, strokeWidth=2).encode(
             x=x_shared,
             y=alt.Y("득표율:Q", axis=alt.Axis(title="득표율(%)")),
             color=alt.Color("계열:N",
                             scale=alt.Scale(domain=party_order, range=colors),
                             legend=alt.Legend(title=None, orient="top", direction="horizontal", columns=4)),
-            order="__xorder__",  # ✅ avoid internal sort_index showing up
+            detail="계열:N"
         )
 
-        # Selection for hover
         sel = alt.selection_point(fields=["선거명_표시","계열"], nearest=True, on="pointerover", empty=False)
 
-        # Invisible hit targets; also disable default tooltip at mark-level
-        hit = base.mark_circle(size=650, opacity=0, tooltip=False).encode(
+        hit = base.mark_circle(size=650, opacity=0).encode(
             x=x_shared, y="득표율:Q",
             color=alt.Color("계열:N", scale=alt.Scale(domain=party_order, range=colors), legend=None),
+            detail="계열:N"
         ).add_params(sel)
 
-        # Points: only custom tooltip here
         pts = base.mark_circle(size=120).encode(
             x=x_shared, y="득표율:Q",
             color=alt.Color("계열:N", scale=alt.Scale(domain=party_order, range=colors), legend=None),
             opacity=alt.condition(sel, alt.value(1), alt.value(0)),
-            tooltip=[  # ✅ custom-only tooltip (no sort_index)
-                alt.Tooltip("선거명_표시:N", title="선거명"),
-                alt.Tooltip("계열:N", title="계열"),
-                alt.Tooltip("득표율:Q", title="득표율(%)", format=".2f"),
-            ],
+            detail="계열:N",
+            tooltip=[alt.Tooltip("선거명_표시:N", title="선거명"),
+                     alt.Tooltip("계열:N", title="계열"),
+                     alt.Tooltip("득표율:Q", title="득표율(%)", format=".2f")]
         ).transform_filter(sel)
 
         zoomX = alt.selection_interval(bind='scales', encodings=['x'])
