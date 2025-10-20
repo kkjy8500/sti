@@ -233,10 +233,10 @@ def render_population_box(
         st.write({"region_total": region_total, "avg_total": avg_total, "x_max": x_max, "bar_size": bar_size})
 
 # =========================================================
-# (2) Age Composition (Half donut) – internal text (polar center; fully responsive)
-# - Place text using polar coords: theta=0, radius=0 (chart center)
-# - Vertical spacing via dy; no expr/signals; layers share same top-level props
-# TUNE: inner/outer radius, height, colors, dy offsets.
+# (2) Age Composition (Half donut) – vconcat with centered text charts (fully responsive)
+# - Donut on top; two tiny text charts below (percent & label)
+# - Text charts use x∈[0,1] with x=0.5 to stay centered across container widths.
+# TUNE: inner/outer radius, heights, fonts, gaps.
 # =========================================================
 def render_age_highlight_chart(pop_sel: pd.DataFrame, *, bookmark_map: dict | None = None, box_height_px: int = 240):
     df = _norm_cols(pop_sel.copy()) if pop_sel is not None else pd.DataFrame()
@@ -286,7 +286,10 @@ def render_age_highlight_chart(pop_sel: pd.DataFrame, *, bookmark_map: dict | No
     st.markdown("<div style='height: 6px;'></div>", unsafe_allow_html=True)
 
     inner_r, outer_r = 68, 106   # TUNE: donut thickness
-    H = max(220, int(box_height_px))  # TUNE: chart height
+    H_DONUT = max(220, int(box_height_px))  # TUNE: donut height
+    H_NUM   = 34                 # TUNE: percent text block height
+    H_LBL   = 26                 # TUNE: label text block height
+    NUM_FONT, LBL_FONT = 28, 14  # TUNE: font sizes
 
     df_vis = pd.DataFrame({
         "연령": labels_order, "명": values, "비율": ratios01, "표시비율": ratios100,
@@ -294,7 +297,7 @@ def render_age_highlight_chart(pop_sel: pd.DataFrame, *, bookmark_map: dict | No
     })
 
     base = (
-        alt.Chart(df_vis, height=H)
+        alt.Chart(df_vis, height=H_DONUT)
         .mark_arc(innerRadius=inner_r, outerRadius=outer_r, cornerRadius=6, stroke="white", strokeWidth=1)
         .encode(
             theta=alt.Theta("비율:Q", stack=True, sort=None, scale=alt.Scale(range=[-math.pi/2, math.pi/2])),
@@ -307,27 +310,39 @@ def render_age_highlight_chart(pop_sel: pd.DataFrame, *, bookmark_map: dict | No
         .configure_view(stroke=None)
     )
 
-    # center texts layer (polar center -> fully responsive)
     idx = labels_order.index(focus)
     pct_txt = f"{(ratios100[idx]):.2f}%"
     focus_lbl = {Y:Y, M:M, O:O}.get(focus, focus)
 
-    NUM_FONT, LBL_FONT = 28, 14   # TUNE: font sizes
-    DY_NUM, DY_LBL = 2, 28        # TUNE: vertical offsets from center
+    df_num = pd.DataFrame({"x":[0.5], "t":[pct_txt]})
+    df_lbl = pd.DataFrame({"x":[0.5], "t":[focus_lbl]})
 
+    # centered percent line
     num_text = (
-        alt.Chart(pd.DataFrame({"t":[pct_txt]}), height=H)
-        .mark_text(fontWeight="bold", fontSize=NUM_FONT, color="#0f172a", dy=DY_NUM)  # TUNE: number style
-        .encode(text="t:N", theta=alt.value(0), radius=alt.value(0))
-    )
-    lbl_text = (
-        alt.Chart(pd.DataFrame({"t":[focus_lbl]}), height=H)
-        .mark_text(fontSize=LBL_FONT, color="#475569", baseline="top", dy=DY_LBL)  # TUNE: label style
-        .encode(text="t:N", theta=alt.value(0), radius=alt.value(0))
+        alt.Chart(df_num, height=H_NUM)
+        .mark_text(fontWeight="bold", fontSize=NUM_FONT, color="#0f172a")  # TUNE: percent style
+        .encode(
+            x=alt.X("x:Q", scale=alt.Scale(domain=[0,1]), axis=None),
+            text="t:N"
+        )
+        .properties(padding={"top":0,"bottom":0,"left":0,"right":0})
+        .configure_view(stroke=None)
     )
 
-    st.altair_chart((base + num_text + lbl_text).properties(autosize=alt.AutoSizeParams(type="fit", contains="padding", resize=True)),
-                    use_container_width=True, theme=None)
+    # centered label line
+    lbl_text = (
+        alt.Chart(df_lbl, height=H_LBL)
+        .mark_text(fontSize=LBL_FONT, color="#475569", baseline="top")    # TUNE: label style
+        .encode(
+            x=alt.X("x:Q", scale=alt.Scale(domain=[0,1]), axis=None),
+            text="t:N"
+        )
+        .properties(padding={"top":0,"bottom":0,"left":0,"right":0})
+        .configure_view(stroke=None)
+    )
+
+    chart = alt.vconcat(base, num_text, lbl_text).resolve_scale(x="shared")
+    st.altair_chart(chart, use_container_width=True, theme=None)
 
 # =========================================================
 # Sex ratio by age – horizontal bars
@@ -780,3 +795,4 @@ def render_region_detail_layout(
             render_incumbent_card(df_cur_sel)
         with c3.container(height="stretch"):
             render_prg_party_box(df_idx_sel, df_idx_all=df_idx_all)
+
