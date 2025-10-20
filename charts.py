@@ -300,7 +300,10 @@ def render_age_highlight_chart(pop_sel: pd.DataFrame, *, bookmark_map: dict | No
         st.info("연령 구성 데이터가 없습니다.")
         return
 
+    # --- Key labels ---
     Y, M, O = "청년층(18~39세)", "중년층(40~59세)", "고령층(65세 이상)"
+
+    # --- total column auto detect ---
     total_col = None
     try:
         total_col = _col(df, bookmark_map, "total_voters",
@@ -313,6 +316,7 @@ def render_age_highlight_chart(pop_sel: pd.DataFrame, *, bookmark_map: dict | No
             st.info(f"연령대 컬럼이 없습니다: {c}")
             return
 
+    # --- numeric cast ---
     def _num(v):
         try:
             return float(str(v).replace(",", "").replace("%", "").strip())
@@ -345,13 +349,15 @@ def render_age_highlight_chart(pop_sel: pd.DataFrame, *, bookmark_map: dict | No
         "순서": [1, 2, 3, 4],
     })
 
-    # --- 도넛 (상단 반원 그대로)
+    # =======================================================
+    # 🟦 반원 도넛 (상단 유지, 전체적으로 살짝 아래 배치)
+    # =======================================================
     donut = (
         alt.Chart(df_vis)
         .mark_arc(innerRadius=70, outerRadius=110, cornerRadius=6, stroke="white", strokeWidth=1)
         .encode(
             theta=alt.Theta("비율:Q", stack=True, sort=None,
-                            scale=alt.Scale(range=[-math.pi/2, math.pi/2])),  # ✅ 상단 반원 유지
+                            scale=alt.Scale(range=[-math.pi/2, math.pi/2])),  # 상단 반원
             order=alt.Order("순서:Q"),
             color=alt.Color("강조:N",
                             scale=alt.Scale(domain=[True, False], range=["#1E6BFF", "#E5E7EB"]),
@@ -361,33 +367,47 @@ def render_age_highlight_chart(pop_sel: pd.DataFrame, *, bookmark_map: dict | No
                 alt.Tooltip("표시비율:Q", title="비율(%)", format=".2f"),
             ],
         )
-        .properties(height=box_height_px)
+        .properties(
+            height=box_height_px,
+            padding={"top": 0, "bottom": 0, "left": 0, "right": 0},
+        )
+        .transform_calculate(
+            # ⚙️ 도넛 자체를 약간 아래로 내리기 위한 보정 (height * 0.48)
+            cy="height * 0.48"
+        )
     )
 
-    # --- 텍스트 중심 위치를 width/2, height*0.65 기준으로
+    # =======================================================
+    # 🟨 텍스트: 도넛 중심 기준 아래 정렬
+    # =======================================================
     label_map = {Y: "청년층(18~39세)", M: "중년층(40~59세)", O: "고령층(65세 이상)"}
     pct_txt = f"{ratios100[labels.index(focus)]:.2f}%"
     lbl_txt = label_map.get(focus, focus)
     text_df = pd.DataFrame({"pct": [pct_txt], "lbl": [lbl_txt]})
 
+    # 숫자: 도넛 중심 기준 (height*0.48)
     num_layer = (
         alt.Chart(text_df)
-        .transform_calculate(cx="width/2", cy="height*0.65")  # ✅ 중앙보다 약간 아래
+        .transform_calculate(cx="width/2", cy="height*0.48")
         .mark_text(fontSize=28, fontWeight="bold", color="#0f172a",
                    align="center", baseline="middle")
         .encode(x="cx:Q", y="cy:Q", text="pct:N")
     )
 
+    # 라벨: 숫자 바로 아래 (height*0.48 + 24)
     lbl_layer = (
         alt.Chart(text_df)
-        .transform_calculate(cx="width/2", cy="height*0.65 + 26")
+        .transform_calculate(cx="width/2", cy="height*0.48 + 24")
         .mark_text(fontSize=14, color="#475569", align="center", baseline="top")
         .encode(x="cx:Q", y="cy:Q", text="lbl:N")
     )
 
+    # =======================================================
+    # 🎯 Combine (격자, 뷰프레임 제거)
+    # =======================================================
     final_chart = (
         alt.layer(donut, num_layer, lbl_layer)
-        .configure_view(stroke=None)
+        .configure_view(stroke=None)  # ✅ 격자/테두리 제거
         .properties(autosize=alt.AutoSizeParams(type="fit", contains="padding"))
     )
 
@@ -874,6 +894,7 @@ def render_region_detail_layout(
             render_incumbent_card(df_cur_sel)
         with c3.container(height="stretch"):
             render_prg_party_box(df_idx_sel, df_idx_all=df_idx_all)
+
 
 
 
