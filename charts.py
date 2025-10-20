@@ -101,12 +101,11 @@ COLOR_BLUE = "#3B82F6"  # Blue color for the selected region bar
 COLOR_GRAY = "#D1D5DB"  # Gray color for the average/comparison bar
 # =========================================================
 
-
 # =========================================================
 # Population Box – KPI + two-bars (Region vs 10-avg)
 # Key modifications: Vertical bar chart implemented.
-# - Removed complex bar size calculation.
-# - Switched X and Y encoding for vertical orientation.
+# - Removed fixed bar width for container responsiveness.
+# - Explicitly set X-axis labels to be horizontal.
 # =========================================================
 def render_population_box(
     pop_sel: pd.DataFrame,
@@ -230,8 +229,6 @@ def render_population_box(
     # TUNE: Bar Chart Configuration (Vertical)
     # The quantitative axis is now Y, the categorical axis is X.
 
-    bar_width = 40  # TUNE: Fixed width of the vertical bars (pixels)
-
     # Y-axis maximum calculation (quantitative axis with headroom)
     y_max = float(bar_df["value"].max()) if len(bar_df) else 1.0
     if (not math.isfinite(y_max)) or (y_max <= 0): y_max = 1.0
@@ -239,14 +236,14 @@ def render_population_box(
 
     chart = (
         alt.Chart(bar_df)
-        .mark_bar(width=bar_width)  # Set the fixed width of the vertical bars
+        .mark_bar()  # TUNE: Removed fixed width for auto-sizing (responsive bar width)
         .encode(
             # X-axis for Categories (Labels)
             x=alt.X(
                 "label:N",
                 title=None,
-                # TUNE: Disable ticks on X-axis and keep labels for category names
-                axis=alt.Axis(labels=True, ticks=False)
+                # TUNE: Ensure labels are shown horizontally (labelAngle=0)
+                axis=alt.Axis(labels=True, labelAngle=0)
             ),
             # Y-axis for Quantitative Values
             y=alt.Y(
@@ -277,7 +274,7 @@ def render_population_box(
             "avg_total": avg_total,
             "bar_df_head": bar_df.head(3),
             "y_max": y_max,
-            "bar_width": bar_width,
+            "responsive_bars": "True", # Changed from bar_width
         })
         
 
@@ -855,4 +852,5 @@ def render_region_detail_layout(
             render_incumbent_card(df_cur_sel)
         with c3.container(height="stretch"):
             render_prg_party_box(df_idx_sel, df_idx_all=df_idx_all)
+
 
