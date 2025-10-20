@@ -350,16 +350,16 @@ def render_age_highlight_chart(pop_sel: pd.DataFrame, *, bookmark_map: dict | No
     focus = st.radio("강조", [Y, M, O], index=0, horizontal=True, label_visibility="collapsed")
     st.markdown("<div style='height: 6px;'></div>", unsafe_allow_html=True)
 
-    inner_r, outer_r = 68, 106         # TUNE: donut radii
-    W = 320                             # TUNE: chart width (px)
-    H = max(220, int(box_height_px))    # TUNE: chart height (px)
+    inner_r, outer_r = 68, 106       # TUNE
+    W = 320                           # TUNE
+    H = max(220, int(box_height_px))  # TUNE
 
     df_vis = pd.DataFrame({
         "연령": labels_order, "명": values, "비율": ratios01, "표시비율": ratios100,
         "강조": [l == focus for l in labels_order], "순서": [1, 2, 3, 4],
     })
 
-    # --- Donut (autosize: fit) ---
+    # --- Donut (no autosize here; apply at top-level) ---
     base = (
         alt.Chart(df_vis, width=W, height=H)
         .mark_arc(innerRadius=inner_r, outerRadius=outer_r, cornerRadius=6, stroke="white", strokeWidth=1)
@@ -373,47 +373,34 @@ def render_age_highlight_chart(pop_sel: pd.DataFrame, *, bookmark_map: dict | No
                 alt.Tooltip("표시비율:Q", title="비율(%)", format=".2f"),
             ],
         )
-        .properties(autosize=alt.AutoSizeParams(type="fit"))  # ✅ make donut responsive
     )
 
     label_map = {Y: "청년층(18~39세)", M: "중년층(40~59세)", O: "고령층(65세 이상)"}
     idx = labels_order.index(focus)
     pct_txt = f"{(ratios100[idx]):.2f}%"
 
-    NUM_FONT, LBL_FONT = 28, 14         # TUNE: center text font sizes
+    NUM_FONT, LBL_FONT = 28, 14
     center_y = H / 2
 
-    # --- Center number (autosize: fit) ---
+    # --- Center texts (no autosize here) ---
     num_text = (
         alt.Chart(pd.DataFrame({"t":[pct_txt]}), width=W, height=H)
         .mark_text(fontWeight="bold", fontSize=NUM_FONT, color="#0f172a")
         .encode(text="t:N", x=alt.value(W/2), y=alt.value(center_y + 2))
-        .properties(autosize=alt.AutoSizeParams(type="fit"))  # ✅ make text responsive
     )
-
-    # --- Center label (autosize: fit) ---
     lbl_text = (
         alt.Chart(pd.DataFrame({"t":[label_map.get(focus, focus)]}), width=W, height=H)
         .mark_text(fontSize=LBL_FONT, color="#475569", baseline="top")
         .encode(text="t:N", x=alt.value(W/2), y=alt.value(center_y + 28))
-        .properties(autosize=alt.AutoSizeParams(type="fit"))  # ✅ make text responsive
     )
 
-    st.altair_chart(
-        (base + num_text + lbl_text).configure_view(stroke=None),
-        use_container_width=True, theme=None
-    )
-
-    # =======================================================
-    # 🎯 Combine (격자, 뷰프레임 제거)
-    # =======================================================
-    final_chart = (
-        alt.layer(donut, num_layer, lbl_layer)
-        .configure_view(stroke=None)  # ✅ 격자/테두리 제거
+    # ✅ Apply autosize ONLY at the top-level layered chart
+    chart = (
+        (base + num_text + lbl_text)
+        .configure_view(stroke=None)
         .properties(autosize=alt.AutoSizeParams(type="fit", contains="padding"))
     )
-
-    st.altair_chart(final_chart, use_container_width=True, theme=None)
+    st.altair_chart(chart, use_container_width=True, theme=None)
 
 # =========================================================
 # Sex ratio by age – horizontal bars
@@ -896,6 +883,7 @@ def render_region_detail_layout(
             render_incumbent_card(df_cur_sel)
         with c3.container(height="stretch"):
             render_prg_party_box(df_idx_sel, df_idx_all=df_idx_all)
+
 
 
 
