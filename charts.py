@@ -300,10 +300,8 @@ def render_age_highlight_chart(pop_sel: pd.DataFrame, *, bookmark_map: dict | No
         st.info("연령 구성 데이터가 없습니다.")
         return
 
-    # --- Core labels ---
     Y, M, O = "청년층(18~39세)", "중년층(40~59세)", "고령층(65세 이상)"
 
-    # --- Total detection (optional) ---
     total_col = None
     try:
         total_col = _col(df, bookmark_map, "total_voters",
@@ -311,7 +309,6 @@ def render_age_highlight_chart(pop_sel: pd.DataFrame, *, bookmark_map: dict | No
     except Exception:
         total_col = None
 
-    # --- Validate columns ---
     for c in (Y, M, O):
         if c not in df.columns:
             st.info(f"연령대 컬럼이 없습니다: {c}")
@@ -324,8 +321,7 @@ def render_age_highlight_chart(pop_sel: pd.DataFrame, *, bookmark_map: dict | No
         except Exception:
             return 0.0
 
-    cols_to_cast = [Y, M, O] + ([total_col] if total_col else [])
-    for c in cols_to_cast:
+    for c in [Y, M, O] + ([total_col] if total_col else []):
         df[c] = df[c].apply(_num).fillna(0.0)
 
     y, m, o = df[Y].sum(), df[M].sum(), df[O].sum()
@@ -335,31 +331,28 @@ def render_age_highlight_chart(pop_sel: pd.DataFrame, *, bookmark_map: dict | No
         return
 
     mid_60_64 = max(0.0, tot - (y + m + o))
-    labels_order = [Y, M, "60–64세", O]
+    labels = [Y, M, "60–64세", O]
     values = [y, m, mid_60_64, o]
     ratios = [v / tot for v in values]
     ratios100 = [r * 100 for r in ratios]
 
-    # --- Focus selection ---
     focus = st.radio("강조", [Y, M, O], index=0, horizontal=True, label_visibility="collapsed")
     st.markdown("<div style='height:6px;'></div>", unsafe_allow_html=True)
 
-    # --- Visualization data ---
     df_vis = pd.DataFrame({
-        "연령": labels_order,
+        "연령": labels,
         "비율": ratios,
         "표시비율": ratios100,
-        "강조": [l == focus for l in labels_order],
+        "강조": [l == focus for l in labels],
         "순서": [1, 2, 3, 4],
     })
 
     # --- Base donut chart ---
-    chart = (
+    base = (
         alt.Chart(df_vis)
         .mark_arc(innerRadius=70, outerRadius=110, cornerRadius=6, stroke="white", strokeWidth=1)
         .encode(
-            theta=alt.Theta("비율:Q", stack=True, sort=None,
-                            scale=alt.Scale(range=[-math.pi/2, math.pi/2])),
+            theta=alt.Theta("비율:Q", stack=True, sort=None, scale=alt.Scale(range=[-math.pi/2, math.pi/2])),
             order=alt.Order("순서:Q"),
             color=alt.Color("강조:N",
                             scale=alt.Scale(domain=[True, False], range=["#1E6BFF", "#E5E7EB"]),
@@ -372,33 +365,27 @@ def render_age_highlight_chart(pop_sel: pd.DataFrame, *, bookmark_map: dict | No
         .properties(height=box_height_px)
     )
 
-    # --- Center text layer (schema-safe & responsive) ---
+    # --- Center text layers (numeric-safe positioning) ---
     label_map = {Y: "청년층(18~39세)", M: "중년층(40~59세)", O: "고령층(65세 이상)"}
-    pct_txt = f"{ratios100[labels_order.index(focus)]:.2f}%"
+    pct_txt = f"{ratios100[labels.index(focus)]:.2f}%"
+    lbl_txt = label_map.get(focus, focus)
 
-    text_df = pd.DataFrame({
-        "text": [pct_txt, label_map.get(focus, focus)],
-        "type": ["pct", "label"],
-    })
-
-    text_layer = (
-        alt.Chart(text_df)
-        .mark_text(align="center")
-        .encode(
-            x=alt.value("50%"),  # ✅ center horizontally, schema-safe
-            y=alt.Y("type:N",
-                    sort=["pct", "label"],
-                    axis=None,
-                    scale=alt.Scale(domain=["pct", "label"], range=[box_height_px/2, box_height_px/2 + 26])),
-            text="text:N",
-            fontSize=alt.condition(alt.datum.type == "pct", alt.value(28), alt.value(14)),
-            fontWeight=alt.condition(alt.datum.type == "pct", alt.value("bold"), alt.value("normal")),
-            color=alt.condition(alt.datum.type == "pct", alt.value("#0f172a"), alt.value("#475569")),
-        )
+    num_layer = (
+        alt.Chart(pd.DataFrame({"t": [pct_txt]}))
+        .mark_text(fontSize=28, fontWeight="bold", color="#0f172a")
+        .encode(text="t:N", x=alt.value(0), y=alt.value(box_height_px / 2))
+        .properties(width="container")  # ensures horizontal centering
+    )
+    lbl_layer = (
+        alt.Chart(pd.DataFrame({"t": [lbl_txt]}))
+        .mark_text(fontSize=14, color="#475569", baseline="top")
+        .encode(text="t:N", x=alt.value(0), y=alt.value(box_height_px / 2 + 26))
+        .properties(width="container")
     )
 
+    # Combine layers safely
     final_chart = (
-        alt.layer(chart, text_layer)
+        alt.layer(base, num_layer, lbl_layer)
         .configure_view(stroke=None)
         .properties(autosize=alt.AutoSizeParams(type="fit", contains="padding"))
     )
@@ -886,6 +873,7 @@ def render_region_detail_layout(
             render_incumbent_card(df_cur_sel)
         with c3.container(height="stretch"):
             render_prg_party_box(df_idx_sel, df_idx_all=df_idx_all)
+
 
 
 
