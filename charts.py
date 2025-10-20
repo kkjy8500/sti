@@ -306,8 +306,7 @@ def render_age_highlight_chart(pop_sel: pd.DataFrame, *, bookmark_map: dict | No
     focus = st.radio("강조", [Y, M, O], index=0, horizontal=True, label_visibility="collapsed")
     st.markdown("<div style='height: 6px;'></div>", unsafe_allow_html=True)
 
-    inner_r, outer_r = 68, 106         # TUNE: donut radii
-    W = 320                              # TUNE: chart width (px)
+    inner_r, outer_r = 70, 110         # TUNE: donut radii
     H = max(220, int(box_height_px))     # TUNE: chart height (px)
 
     df_vis = pd.DataFrame({
@@ -813,4 +812,5 @@ def render_region_detail_layout(
             render_incumbent_card(df_cur_sel)
         with c3.container(height="stretch"):
             render_prg_party_box(df_idx_sel, df_idx_all=df_idx_all)
+
 
