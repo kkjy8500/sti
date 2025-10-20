@@ -316,7 +316,7 @@ def render_age_highlight_chart(pop_sel: pd.DataFrame, *, bookmark_map: dict | No
     })
 
     base = (
-        alt.Chart(df_vis, height=H)
+        alt.Chart(df_vis, width="container", height=H)
         .mark_arc(innerRadius=inner_r, outerRadius=outer_r, cornerRadius=6, stroke="white", strokeWidth=1)
         .encode(
             theta=alt.Theta("비율:Q", stack=True, sort=None, scale=alt.Scale(range=[-math.pi/2, math.pi/2])),
@@ -338,9 +338,10 @@ def render_age_highlight_chart(pop_sel: pd.DataFrame, *, bookmark_map: dict | No
     center_y = H / 2
 
     num_text = (
-        alt.Chart(pd.DataFrame({"t":[pct_txt]}), width=W, height=H)
+        alt.Chart(pd.DataFrame({"t": [pct_txt]}))
         .mark_text(fontWeight="bold", fontSize=NUM_FONT, color="#0f172a")
-        .encode(text="t:N", x=alt.value(W/2), y=alt.value(center_y + 2))
+        .encode(text="t:N", x=alt.value(0), y=alt.value(center_y + 2))
+        .properties(width="container", height=H)
     )
     lbl_text = (
         alt.Chart(pd.DataFrame({"t":[label_map.get(focus, focus)]}), width=W, height=H)
@@ -813,6 +814,7 @@ def render_region_detail_layout(
             render_incumbent_card(df_cur_sel)
         with c3.container(height="stretch"):
             render_prg_party_box(df_idx_sel, df_idx_all=df_idx_all)
+
 
 
 
