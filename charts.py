@@ -216,7 +216,6 @@ def render_population_box(
     st.markdown("<!-- TUNE: Top section padding/margin -->", unsafe_allow_html=True)
     c1, c2 = st.columns(2)
     with c1:
-        # TUNE: Color of KPI label (Gray) and value (Dark Gray)
         st.markdown(
             f"""
             <div style="text-align:center;">
@@ -239,6 +238,8 @@ def render_population_box(
             """, unsafe_allow_html=True
         )
 
+    st.markdown("<div style='height:16px;'></div>", unsafe_allow_html=True)
+
     # ---------- Vertical Bar Chart (Two-Bar Comparison) ----------
     if grp is not None and avg_total is not None and region_total > 0:
         current_selected_gu_name = "선택 지역 (합산)"
@@ -253,11 +254,19 @@ def render_population_box(
             "Highlight": ["Selected", "Average"],
         }).replace([pd.NA, float("inf"), float("-inf")], 0.0)
 
+        COLOR_BLUE = "#3B82F6"
+        COLOR_GRAY = "#6B7280"
+
         base = (
             alt.Chart(df_chart)
             .encode(
                 x=alt.X("Category:N", title=None, axis=alt.Axis(labelAngle=0)),
-                y=alt.Y("VoterCount:Q", title="유권자 수 (명)", axis=alt.Axis(format="~s")),
+                y=alt.Y(
+                    "VoterCount:Q",
+                    title="유권자 수 (명)",
+                    scale=alt.Scale(domain=[0, 250000]),
+                    axis=alt.Axis(format="~s")
+                ),
                 tooltip=[
                     alt.Tooltip("Category:N", title="구분"),
                     alt.Tooltip("VoterCount:Q", title="유권자 수", format=",.0f"),
@@ -265,6 +274,7 @@ def render_population_box(
             )
             .properties(
                 height=int(box_height_px * 1.5),
+                padding={"top": 8, "right": 0, "bottom": 0, "left": 0},  # 상단 여백
             )
         )
 
@@ -862,6 +872,7 @@ def render_region_detail_layout(
             render_incumbent_card(df_cur_sel)
         with c3.container(height="stretch"):
             render_prg_party_box(df_idx_sel, df_idx_all=df_idx_all)
+
 
 
 
