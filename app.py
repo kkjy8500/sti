@@ -1,3 +1,4 @@
+# app.py
 # Purpose: Streamlit main app - displays political analysis data in interactive tables and charts.
 # Key Features: Two main tables on the 'Summary' page (종합).
 # 1. Main Summary Table: Features score bars, dynamic Top 3 highlights, and fixed row highlights.
@@ -12,14 +13,14 @@ import numpy as np
 
 # Data Loader Imports (Korean function names are maintained as per the original structure)
 from data_loader import (
-    load_bookmark,             # bookmark.csv (optional but preferred)
-    load_bookmark_map,         # -> dict, standard_key -> actual column
-    load_population_agg,       # population.csv
-    load_party_labels,         # party_labels.csv
-    load_vote_trend,           # vote_trend.csv
-    load_results_2024,         # 5_na_dis_results.csv
-    load_current_info,         # current_info.csv
-    load_index_sample,         # index_sample.csv
+    load_bookmark,              # bookmark.csv (optional but preferred)
+    load_bookmark_map,          # -> dict, standard_key -> actual column
+    load_population_agg,        # population.csv
+    load_party_labels,          # party_labels.csv
+    load_vote_trend,            # vote_trend.csv
+    load_results_2024,          # 5_na_dis_results.csv
+    load_current_info,          # current_info.csv
+    load_index_sample,          # index_sample.csv
 )
 
 # Chart Renderer Imports (Korean function names are maintained as per the original structure)
@@ -45,36 +46,28 @@ ABSOLUTE_MAX_SCORES = {
     "정치지형": 20.0,
     "주체역량": 30.0,
     "상대역량": 30.0,
-    "고령층 비율": 1.0,
-    "청년층 비율": 1.0,
-    "4-50대 비율": 1.0,
-    "2030여성 비율": 1.0,
-    "진보정당 득표력": 10.0,
-    "현직 득표력": 100.0,
-    "민주당 득표력": 100.0,
-    "보수 득표력": 100.0,
 }
 
 # ===== Style Configurations (English Comments for Maintainability) =====
 # Fixed width for the Region Name column (to ensure stable alignment)
-REGION_COL_WIDTH = "150px" 
+REGION_COL_WIDTH = "150px"  
 
 # FIXED HIGHLIGHT: List of regions for permanent row highlighting in the '결과 요약' table.
-FIXED_HIGHLIGHT_REGIONS = ["서울 서대문구갑", "경기 평택시을", "경기 화성시을"] 
+FIXED_HIGHLIGHT_REGIONS = ["서울 서대문구갑", "경기 평택시을", "경기 화성시을"]  
 
 # FIXED HIGHLIGHT: Background color for the entire row of the fixed highlight regions (Summary Table only)
 FIXED_HIGHLIGHT_ROW_BG = "#FFF9C4" # Light yellow background color for fixed highlighted rows
 
-# DYNAMIC HIGHLIGHT: Background color for the bar container when a score is in the Top 3 
+# DYNAMIC HIGHLIGHT: Background color for the bar container when a score is in the Top 3  
 DYNAMIC_HIGHLIGHT_CELL_BG = "#E0F2FE" # Light sky blue for dynamic Top 3 scores
 
 # Colors for the main scoring bars (Used in the '종합' tab - '결과 요약')
 BAR_COLORS_MAIN = {
-    "합계": "#3498DB",       # Total Score Bar Color (Blue)
+    "합계": "#3498DB",          # Total Score Bar Color (Blue)
     "유권자환경": "#48C9B0", # Electorate Environment Bar Color (Light Cyan)
-    "정치지형": "#1ABC9C",   # Political Landscape Bar Color (Green)
-    "주체역량": "#76D7C4",   # Subjective Capacity Bar Color (Very Light Green)
-    "상대역량": "#2ECC71",   # Opponent Capacity Bar Color (Emerald Green)
+    "정치지형": "#1ABC9C",    # Political Landscape Bar Color (Green)
+    "주체역량": "#76D7C4",    # Subjective Capacity Bar Color (Very Light Green)
+    "상대역량": "#2ECC71",    # Opponent Capacity Bar Color (Emerald Green)
 }
 # ====================================================================
 
@@ -213,7 +206,7 @@ def build_regions(primary_df: pd.DataFrame, *fallback_dfs: pd.DataFrame, bookmar
 # Helper to format numeric values (Count vs. Ratio/Score)
 def _format_value(val: float | object, col_name: str) -> str:
     """
-    Formats the value: comma for counts, two decimals for scores/ratios.
+    Formats the value: comma for counts (and specific integer metrics like 유동성), two decimals for scores/ratios.
     """
     try:
         v = float(val)
@@ -223,9 +216,12 @@ def _format_value(val: float | object, col_name: str) -> str:
         return str(val)
 
     # Heuristic for Count-like data (should use comma)
-    count_names = ["유권자 수", "유동인구", "진보당 당원수", "진보당 지방선거 후보 수"] 
+    # MODIFICATION 3: Added "유동성A", "유동성B" to count_names for integer formatting.
+    count_names = ["유권자 수", "유동인구", "진보당 당원수", "진보당 지방선거 후보 수", "유동성A", "유동성B"]
     if col_name in count_names:
-        return f"{int(round(v)):,d}" # Rounds to nearest int and applies comma format
+        # Rounds to nearest int and applies comma format
+        # Using int(round(v)) to handle float values that should be treated as integers
+        return f"{int(round(v)):,d}" 
     
     # Default for Scores/Ratios
     return f"{v:.2f}" # Two decimal places
@@ -280,7 +276,7 @@ def _bar_cell_factory(score_df: pd.DataFrame, score_cols: list[str], bar_colors:
         color = bar_colors.get(col, "#6B7280") 
         
         # Set background for the bar container (DYNAMIC_HIGHLIGHT_CELL_BG for Top 3)
-        container_bg = DYNAMIC_HIGHLIGHT_CELL_BG if is_top3 else "#F3F4F6" 
+        container_bg = DYNAMIC_HIGHLIGHT_CELL_BG if is_top3 else "#F3F4F6" # #F3F4F6: light gray background for score bar container
         
         # Format the number displayed on the bar
         formatted_value = _format_value(v, col)
@@ -288,7 +284,7 @@ def _bar_cell_factory(score_df: pd.DataFrame, score_cols: list[str], bar_colors:
         # HTML Structure for the bar
         return (
             # Outer Div: Handles padding for the cell
-            f'<div style="padding:6px 8px; height:100%; box-sizing:border-box;">'
+            f'<div style="padding:6px 8px; height:100%; box-sizing:border-box;">' # 6px vertical, 8px horizontal padding for cell content
             # Inner Container Div: Holds the bar and background color for Top 3 highlight
             f'<div style="position:relative;width:100%;background:{container_bg};height:18px;border-radius:4px;overflow:hidden;min-width:50px; transition: background-color 0.2s ease-in-out;">'
             # Bar Div: The colored bar that represents the score
@@ -382,18 +378,19 @@ if menu == "종합":
     # --- Build HTML table for main scoring ('결과 요약') ---
     headers = [label_col] + score_cols
     
-    # Region Column Header (Uses fixed width)
+    # Region Column Header (Uses fixed width, left-aligned)
     thead = (
         f"<th style='text-align:left;padding:6px 8px;white-space:nowrap;width:{REGION_COL_WIDTH};'>"
         f"지역</th>" 
     )
-    # Remaining headers (Calculates equal width based on column count)
+    # Remaining headers (Calculates equal width based on column count, CENTER-ALIGNED)
+    # MODIFICATION 1: Changed text-align to 'center' for score headers
     remaining_cols_count = len(score_cols)
     col_width_pct = f"{100 / remaining_cols_count}%" if remaining_cols_count > 0 else "auto"
     
     thead += "".join(
         [
-            f"<th style='text-align:left;padding:6px 8px;white-space:nowrap;width:{col_width_pct};'>{h}</th>" 
+            f"<th style='text-align:center;padding:6px 8px;white-space:nowrap;width:{col_width_pct};'>{h}</th>" 
             for h in score_cols
         ]
     )
@@ -403,11 +400,11 @@ if menu == "종합":
         # LOGIC: Check for FIXED_HIGHLIGHT_REGIONS using the actual region name in the data
         is_fixed_highlight = row[label_col] in FIXED_HIGHLIGHT_REGIONS
         # CSS: Apply row background color if highlighted
-        row_style = f"background-color:{FIXED_HIGHLIGHT_ROW_BG};" if is_fixed_highlight else ""
+        row_style = f"background-color:{FIXED_HIGHLIGHT_ROW_BG};" if is_fixed_highlight else "" # FIXED_HIGHLIGHT_ROW_BG: light yellow row highlight color
 
         # Region Column Cell (Fixed width)
         cells = [
-            f"<td style='padding:6px 8px;white-space:nowrap;width:{REGION_COL_WIDTH};'>"
+            f"<td style='padding:6px 8px;white-space:nowrap;width:{REGION_COL_WIDTH};'>" # Standard padding for region column
             # CSS: Apply bold font-weight (700) to the region name if the row is highlighted
             f"<span style='font-size:13px; font-weight:{'700' if is_fixed_highlight else '600'};'>{row[label_col]}</span>"
             f"</td>"
@@ -415,7 +412,7 @@ if menu == "종합":
         
         for c in score_cols:
             # Bar Cell (Bar logic handles dynamic highlight/scaling)
-            cells.append(f"<td style='padding:0px;width:{col_width_pct};'>{_bar_cell(row[c], c)}</td>")
+            cells.append(f"<td style='padding:0px;width:{col_width_pct};'>{_bar_cell(row[c], c)}</td>") # 0px padding as the bar cell factory handles inner padding
         
         # Stitch all cells together for the row
         rows_html.append(f"<tr style='{row_style}'>" + "".join(cells) + "</tr>")
@@ -439,6 +436,7 @@ if menu == "종합":
     st.subheader("세부 지표별 상세 분석")
 
     # Indicator Groups Definition
+    # MODIFICATION 2: Added "진보당 지방선거 후보 수" to '주체역량'
     INDICATOR_GROUPS = {
         "유권자환경": ["유권자 수", "유동인구", "고령층 비율", "청년층 비율", "4-50대 비율", "2030여성 비율"],
         "정치지형": ["유동성A", "경합도A", "유동성B", "경합도B"],
@@ -482,12 +480,12 @@ if menu == "종합":
                     # Detailed Analysis HTML Table Generation (Text-Only)
                     headers_new = [label_col_new] + present_cols
                     
-                    # Region Column Header (Fixed width)
+                    # Region Column Header (Fixed width, left-aligned)
                     thead_new = (
                         f"<th style='text-align:left;padding:6px 8px;white-space:nowrap;font-weight:700;width:{REGION_COL_WIDTH};'>"
                         f"지역</th>" 
                     )
-                    # Remaining headers (Equal width)
+                    # Remaining headers (Equal width, CENTER-ALIGNED)
                     remaining_cols_count_new = len(present_cols)
                     col_width_pct_new = f"{100 / remaining_cols_count_new}%" if remaining_cols_count_new > 0 else "auto"
 
