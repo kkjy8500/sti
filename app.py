@@ -614,11 +614,17 @@ elif menu == "데이터 설명":
 
     md_text = None
     # [File Path] Candidates for markdown file location
-    for p in [Path("sti") / "지표별 구성 및 해설.md", Path("지표별 구성 및 해설.md"), Path("/mnt/data/sti/지표별 구성 및 해설.md"]):
+    candidates_md = [
+        Path("sti") / "지표별 구성 및 해설.md",
+        Path("지표별 구성 및 해설.md"),
+        Path("/mnt/data/sti/지표별 구성 및 해설.md"),
+    ]
+    for p in candidates_md:
         s = _read_markdown_cached(str(p))
         if s:
             md_text = s
             break
+
     if md_text:
         st.markdown(md_text)
     else:
