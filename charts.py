@@ -232,7 +232,7 @@ def render_population_box(
         st.markdown(
             f"""
             <div style="text-align:center;">
-              <div style="color:#6B7280; font-weight:600; margin-bottom:4px;">유동인구</div>
+              <div style="color:#6B7280; font-weight:600; margin-bottom:4px;">연간 이동자수</div>
               <div style="font-weight:800; color:#111827;">{floating_value_txt}</div>
             </div>
             """, unsafe_allow_html=True
@@ -883,6 +883,7 @@ def render_region_detail_layout(
             render_incumbent_card(df_cur_sel)
         with c3.container(height="stretch"):
             render_prg_party_box(df_idx_sel, df_idx_all=df_idx_all)
+
 
 
 
