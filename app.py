@@ -198,7 +198,7 @@ def _format_value(val: float | object, col_name: str) -> str:
         if np.isnan(v): return ""
     except Exception:
         return str(val)
-    count_names = ["유권자 수", "유동인구", "진보당 당원수", "진보당 지방선거 후보 수", "유동성A", "유동성B"]
+    count_names = ["유권자 수", "연간 이동자수", "진보당 당원수", "진보당 지방선거 후보 수", "유동성A", "유동성B"]
     if col_name in count_names: return f"{int(round(v)):,d}"
     return f"{v:.2f}"
 
@@ -385,7 +385,7 @@ if menu == "종합":
     st.subheader("세부 지표별 상세 분석")  # [Header] section header size unchanged
 
     INDICATOR_GROUPS = {
-        "유권자환경": ["유권자 수", "유동인구", "고령층 비율", "청년층 비율", "4-50대 비율", "2030여성 비율"],
+        "유권자환경": ["유권자 수", "연간 이동자수", "고령층 비율", "청년층 비율", "4-50대 비율", "2030여성 비율"],
         "정치지형": ["유동성A", "경합도A", "유동성B", "경합도B"],
         "주체역량": ["진보정당 득표력", "진보당 당원수", "진보당 지방선거 후보 수"],
         "상대역량": ["현직 득표력", "민주당 득표력", "보수 득표력"],
