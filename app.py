@@ -593,6 +593,7 @@ elif menu == "데이터 설명":
             unsafe_allow_html=True
         )
     st.divider()
+    _read_markdown_cached.clear()
 
     md_text = None
     # [File Path] Candidates for markdown file location
