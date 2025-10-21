@@ -190,7 +190,7 @@ def build_regions(primary_df: pd.DataFrame, *fallback_dfs: pd.DataFrame, bookmar
     )
     return out
 
-# ---------- [Bar & Text cell renderers for tables] ----------
+# ---------- [Value formatters & cell renderers] ----------
 def _format_value(val: float | object, col_name: str) -> str:
     """Comma for counts; 2 decimals for ratios/scores."""
     try:
@@ -280,6 +280,19 @@ def _find_first_col(df: pd.DataFrame, candidates: list[str]) -> str | None:
     for key in candidates:
         if key in cols: return df.columns[cols.index(key)]
     return None
+
+# ---------- [Robust string key normalizer for description matching] ----------
+def _norm_key(s: object) -> str:
+    """Normalize keys for matching (remove zero-width chars, NBSP, and ALL whitespace)."""
+    if s is None:
+        return ""
+    t = str(s)
+    # remove zero-width chars: 200B..200D, FEFF
+    t = re.sub(r"[\u200B-\u200D\uFEFF]", "", t)
+    # normalize NBSP to space, then remove all whitespace
+    t = t.replace("\xa0", " ")
+    t = re.sub(r"\s+", "", t)
+    return t.strip()
 
 # --------------------------------
 # Page Config
@@ -453,8 +466,8 @@ if menu == "종합":
                         f"<table style='border-collapse:separate;border-spacing:0;width:100%;font-size:{UI_FONT_TABLE_BASE}px;'>"
                         f"<thead><tr>{thead_new}</tr></thead>"
                         f"<tbody>{''.join(rows_html_new)}</tbody>"
-                        "</table>"
-                        "</div>"
+                        f"</table>"
+                        f"</div>"
                     )
                     st.markdown(table_html_new, unsafe_allow_html=True)
 
@@ -478,23 +491,27 @@ if menu == "종합":
                             st.info("`index.csv`에 지표명(예: '지표' 또는 '지표명') 컬럼이 없습니다.")
                         else:
                             df_desc = desc_df.copy()
-                            df_desc[name_col] = df_desc[name_col].astype(str).str.strip()
 
-                            # Match desc rows to the indicators shown in this tab
-                            present_set = set(present_cols)
-                            matched = df_desc[df_desc[name_col].isin(present_set)].copy()
+                            # ------- Robust matching (fixes '연간 이동자수' missing issue) -------
+                            # Build normalized key for index.csv side
+                            df_desc["__match_key"] = df_desc[name_col].astype(str).map(_norm_key)
+                            # Normalize present column names shown in the table
+                            present_set_norm = {_norm_key(x) for x in present_cols}
+                            # Filter by normalized key
+                            matched = df_desc[df_desc["__match_key"].isin(present_set_norm)].copy()
+
                             if matched.empty:
                                 st.info("현재 탭의 컬럼명과 `index.csv`의 지표명이 일치하지 않습니다. 표기 통일이 필요합니다.")
-                                st.caption(f"탭 컬럼: {', '.join(present_cols)}")
+                                # Optional: show which ones are missing to aid debugging
+                                missing = [c for c in present_cols if _norm_key(c) not in set(df_desc["__match_key"])]
+                                if missing:
+                                    st.caption("미매칭 컬럼: " + ", ".join(missing))
                             else:
-                                # [MODIFIED] Sort description based on the order of 'present_cols' (the order shown in the table)
-                                # Step 1: Create a sort key dictionary based on the desired order
-                                sort_order = {name: i for i, name in enumerate(present_cols)}
-                                matched['sort_key'] = matched[name_col].apply(lambda x: sort_order.get(x, len(present_cols)))
-                                
-                                # Step 2: Sort the matched descriptions
-                                sorted_matched = matched.sort_values(by='sort_key').drop(columns=['sort_key'])
-                                
+                                # Keep the display order using normalized sort map
+                                sort_order = { _norm_key(name): i for i, name in enumerate(present_cols) }
+                                matched["__sort_key"] = matched["__match_key"].map(lambda k: sort_order.get(k, len(present_cols)))
+                                sorted_matched = matched.sort_values(by="__sort_key").drop(columns=["__sort_key"])
+
                                 # Build bullet list HTML (bigger fonts, no scroll)
                                 items = []
                                 for _, r in sorted_matched.iterrows():
@@ -597,7 +614,7 @@ elif menu == "데이터 설명":
 
     md_text = None
     # [File Path] Candidates for markdown file location
-    for p in [Path("sti") / "지표별 구성 및 해설.md", Path("지표별 구성 및 해설.md"), Path("/mnt/data/sti/지표별 구성 및 해설.md")]:
+    for p in [Path("sti") / "지표별 구성 및 해설.md", Path("지표별 구성 및 해설.md"), Path("/mnt/data/sti/지표별 구성 및 해설.md"]):
         s = _read_markdown_cached(str(p))
         if s:
             md_text = s
