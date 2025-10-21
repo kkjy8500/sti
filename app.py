@@ -477,7 +477,9 @@ if menu == "종합":
                     st.divider()  # [Spacing] Separator between data table & descriptions
                     st.subheader(f"지표 설명 · {selected_group}")  # [Header] Subheader itself unchanged
 
+                    _read_index_desc_csv.clear()
                     desc_df = _read_index_desc_csv()
+                    
                     if desc_df.empty:
                         st.info("`index.csv`에서 지표 설명을 불러오지 못했습니다. (경로/인코딩/구분자 확인)")
                     else:
